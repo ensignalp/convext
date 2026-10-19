@@ -53,13 +53,13 @@
 </p>
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/mustazafi/convext/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ensignalp/convext/main/install.sh | bash
 ```
 
 <h3 align="center">Alternatif: Git ile Klonlayarak Kurulum</h3>
 
 ```bash
-git clone https://github.com/mustazafi/convext.git
+git clone https://github.com/ensignalp/convext.git
 cd convext
 chmod +x install.sh
 ./install.sh

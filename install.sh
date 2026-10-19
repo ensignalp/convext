@@ -5,7 +5,7 @@ set -euo pipefail
 # Convext — Tek Komutla Otomatik Kurulum Betiği (GNOME / GTK4 / Libadwaita)
 # ==============================================================================
 
-REPO_URL="${CONVEXT_REPO_URL:-https://github.com/mustazafi/convext.git}"
+REPO_URL="${CONVEXT_REPO_URL:-https://github.com/ensignalp/convext.git}"
 INSTALL_SRC_DIR="${HOME}/.local/share/convext-src"
 BIN_DIR="${HOME}/.local/bin"
 NAUTILUS_EXT_DIR="${HOME}/.local/share/nautilus-python/extensions"
