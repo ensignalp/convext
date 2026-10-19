@@ -12,7 +12,41 @@ except ValueError:
     except ValueError:
         pass
 
-from gi.repository import Nautilus, GObject
+try:
+    gi.require_version("Gtk", "4.0")
+except ValueError:
+    pass
+
+from gi.repository import Nautilus, GObject, Gtk, GLib
+
+
+def enable_cascading_dropdowns_on_widget(widget) -> None:
+    """
+    Walks the GTK4 widget tree inside Nautilus and sets Gtk.PopoverMenuFlags.NESTED
+    on every Gtk.PopoverMenu so submenus cascade out as separate dropdown popovers
+    instead of replacing the menu page in-place.
+    """
+    if widget is None:
+        return
+    try:
+        if isinstance(widget, Gtk.PopoverMenu):
+            if widget.get_flags() != Gtk.PopoverMenuFlags.NESTED:
+                widget.set_flags(Gtk.PopoverMenuFlags.NESTED)
+        child = widget.get_first_child()
+        while child is not None:
+            enable_cascading_dropdowns_on_widget(child)
+            child = child.get_next_sibling()
+    except Exception:
+        pass
+
+
+def patch_all_nautilus_menus() -> bool:
+    try:
+        for toplevel in Gtk.Window.list_toplevels():
+            enable_cascading_dropdowns_on_widget(toplevel)
+    except Exception:
+        pass
+    return False
 
 
 def resolve_daemon_binary() -> str:
@@ -102,6 +136,7 @@ class ConvextMenuExtension(GObject.GObject, Nautilus.MenuProvider):
     def __init__(self):
         super().__init__()
         self._counter = 0
+        GLib.idle_add(patch_all_nautilus_menus)
 
     def _make_item(self, label: str, action_code: str, paths: list[str], tip: str = "") -> Nautilus.MenuItem:
         self._counter += 1
@@ -125,6 +160,11 @@ class ConvextMenuExtension(GObject.GObject, Nautilus.MenuProvider):
         send_convext_command(action_code, paths)
 
     def get_file_items(self, *args):
+        # Ensure all Nautilus context menu popovers use Gtk.PopoverMenuFlags.NESTED
+        # so every submenu opens in its own separate cascading dropdown!
+        patch_all_nautilus_menus()
+        GLib.idle_add(patch_all_nautilus_menus)
+
         files = args[-1] if args else []
         if not files:
             return []
@@ -147,33 +187,35 @@ class ConvextMenuExtension(GObject.GObject, Nautilus.MenuProvider):
         cat = detect_category(first_path)
         curr_ext = get_ext(first_path)
 
-        # Single-level top items in Nautilus context menu so each opens its own vertical dropdown
-        # instead of collapsing inside the same popover page
-        top_items = [
-            self._make_item(
-                "Convext Menü (Adwaita Açılır Panel)...",
-                "OPEN_STUDIO",
-                paths,
-                "Dikey açılır menülere (AdwComboRow Dropdown) sahip GNOME Adwaita penceresini aç",
-            )
-        ]
+        # Single top-level "Convext Menü" item in the right-click context menu.
+        # Because Gtk.PopoverMenuFlags.NESTED is enabled, hovering "Convext Menü"
+        # opens a separate cascading dropdown, and hovering any category inside it
+        # opens another separate cascading dropdown!
+        self._counter += 1
+        root_item = Nautilus.MenuItem(
+            name=f"Convext::RootMenu_{self._counter}",
+            label="Convext Menü",
+            tip="Convext Dönüştürme, Medya ve Arşiv Menüsü",
+        )
+        root_menu = Nautilus.Menu()
+        root_item.set_submenu(root_menu)
 
         # 1. ARCHIVE FILES
         if cat == "archive":
-            arc_parent, arc_sub = self._make_submenu("Convext — Arşiv İşlemleri")
-            arc_sub.append_item(self._make_item("Klasöre Çıkart (Extract Here)", "ARC_EXTRACT", paths))
+            root_menu.append_item(self._make_item("Klasöre Çıkart (Extract Here)", "ARC_EXTRACT", paths))
+            conv_parent, conv_sub = self._make_submenu("Arşivi Dönüştür (Archive Convert)")
             for fmt, lbl in [
                 ("zip", "ZIP Arşivine Dönüştür (.zip)"),
                 ("tar", "TAR Arşivine Dönüştür (.tar)"),
                 ("gzip", "GZIP Arşivine Dönüştür (.tar.gz)"),
             ]:
                 if fmt != curr_ext:
-                    arc_sub.append_item(self._make_item(lbl, f"ARC_CONVERT:{fmt}", paths))
-            top_items.append(arc_parent)
+                    conv_sub.append_item(self._make_item(lbl, f"ARC_CONVERT:{fmt}", paths))
+            root_menu.append_item(conv_parent)
 
         # 2. IMAGE FILES
         elif cat == "image":
-            conv_parent, conv_sub = self._make_submenu("Convext — Görsel Dönüştür")
+            conv_parent, conv_sub = self._make_submenu("Format Dönüştür (Convert Image)")
             for fmt, lbl in [
                 ("png", "PNG Formatına Dönüştür (.png)"),
                 ("jpg", "JPG Formatına Dönüştür (.jpg)"),
@@ -188,9 +230,9 @@ class ConvextMenuExtension(GObject.GObject, Nautilus.MenuProvider):
             ]:
                 if fmt != curr_ext:
                     conv_sub.append_item(self._make_item(lbl, f"IMG_CONVERT:{fmt}", paths))
-            top_items.append(conv_parent)
+            root_menu.append_item(conv_parent)
 
-            tools_parent, tools_sub = self._make_submenu("Convext — Görsel Araçları")
+            tools_parent, tools_sub = self._make_submenu("Görsel Araçları (Image Tools)")
             tools_sub.append_item(self._make_item("Sıkıştır — Yüksek Kalite (%85)", "IMG_COMPRESS_85", paths))
             tools_sub.append_item(self._make_item("Sıkıştır — Dengeli (%65)", "IMG_COMPRESS_65", paths))
             tools_sub.append_item(self._make_item("Sıkıştır — Maksimum Küçültme (%40)", "IMG_COMPRESS_40", paths))
@@ -201,11 +243,11 @@ class ConvextMenuExtension(GObject.GObject, Nautilus.MenuProvider):
                 tools_sub.append_item(self._make_item("Seçili Görselleri Tek PDF Yap", "IMG_COLLAGE_PDF", paths))
             tools_sub.append_item(self._make_item("QR Kodu Oku ve Panoya Kopyala", "IMG_QR_DECODE", paths))
             tools_sub.append_item(self._make_item("EXIF / Metadata Temizle", "STRIP_METADATA", paths))
-            top_items.append(tools_parent)
+            root_menu.append_item(tools_parent)
 
         # 3. VIDEO FILES
         elif cat == "video":
-            conv_parent, conv_sub = self._make_submenu("Convext — Video Dönüştür")
+            conv_parent, conv_sub = self._make_submenu("Format Dönüştür (Convert Video)")
             for fmt, lbl in [
                 ("mp4", "MP4 Formatına Dönüştür (.mp4)"),
                 ("mov", "MOV Formatına Dönüştür (.mov)"),
@@ -217,9 +259,9 @@ class ConvextMenuExtension(GObject.GObject, Nautilus.MenuProvider):
             ]:
                 if fmt != curr_ext:
                     conv_sub.append_item(self._make_item(lbl, f"VID_CONVERT:{fmt}", paths))
-            top_items.append(conv_parent)
+            root_menu.append_item(conv_parent)
 
-            tools_parent, tools_sub = self._make_submenu("Convext — Video Araçları")
+            tools_parent, tools_sub = self._make_submenu("Video Araçları (Video Tools)")
             tools_sub.append_item(self._make_item("Videoyu Hızlı Sıkıştır (Compress Video)", "VID_QUICK_COMPRESS", paths))
             tools_sub.append_item(self._make_item("Hedef Boyuta Sıkıştır (MB / KB)...", "VID_TARGET_SIZE", paths))
             tools_sub.append_item(self._make_item("Videoları Birleştir (Join Videos)", "VID_JOIN", paths))
@@ -231,11 +273,11 @@ class ConvextMenuExtension(GObject.GObject, Nautilus.MenuProvider):
             tools_sub.append_item(self._make_item("Videodan Kare Yakala (Save Frame PNG)", "VID_SNAPSHOT", paths))
             tools_sub.append_item(self._make_item("Videoyu Sansürle (Redact Video)", "VID_REDACT", paths))
             tools_sub.append_item(self._make_item("Metadata Bilgilerini Temizle (Edit Metadata)", "STRIP_METADATA", paths))
-            top_items.append(tools_parent)
+            root_menu.append_item(tools_parent)
 
         # 4. AUDIO FILES
         elif cat == "audio":
-            conv_parent, conv_sub = self._make_submenu("Convext — Ses Dönüştür")
+            conv_parent, conv_sub = self._make_submenu("Format Dönüştür (Convert Audio)")
             for fmt, lbl in [
                 ("mp3", "MP3 Formatına Dönüştür (.mp3)"),
                 ("wav", "WAV Formatına Dönüştür (.wav)"),
@@ -248,9 +290,9 @@ class ConvextMenuExtension(GObject.GObject, Nautilus.MenuProvider):
             ]:
                 if fmt != curr_ext:
                     conv_sub.append_item(self._make_item(lbl, f"AUD_CONVERT:{fmt}", paths))
-            top_items.append(conv_parent)
+            root_menu.append_item(conv_parent)
 
-            tools_parent, tools_sub = self._make_submenu("Convext — Ses Araçları")
+            tools_parent, tools_sub = self._make_submenu("Ses Araçları (Audio Tools)")
             tools_sub.append_item(self._make_item("Sesi Sıkıştır (Compress Audio)", "AUD_COMPRESS", paths))
             tools_sub.append_item(self._make_item("Sesi Kırp & Hız Değiştir (Trim & Speed)...", "AUD_TRIM", paths))
             tools_sub.append_item(self._make_item("Ses Seviyesini Dengele (EBU R128 Normalize)", "AUD_NORMALIZE", paths))
@@ -258,11 +300,11 @@ class ConvextMenuExtension(GObject.GObject, Nautilus.MenuProvider):
             tools_sub.append_item(self._make_item("Mono / Stereo Kanal Değiştir", "AUD_CHANNELS", paths))
             tools_sub.append_item(self._make_item("Orta Bölümü Sansürle (Bleep)", "AUD_BLEEP", paths))
             tools_sub.append_item(self._make_item("Metadata Bilgilerini Temizle", "STRIP_METADATA", paths))
-            top_items.append(tools_parent)
+            root_menu.append_item(tools_parent)
 
         # 5. PDF FILES
         elif cat == "pdf":
-            conv_parent, conv_sub = self._make_submenu("Convext — PDF Dönüştür")
+            conv_parent, conv_sub = self._make_submenu("Format Dönüştür (Convert PDF)")
             for fmt, lbl in [
                 ("docx", "Word Belgesine Dönüştür (.docx)"),
                 ("pages", "Apple Pages'e Dönüştür (.pages)"),
@@ -274,20 +316,20 @@ class ConvextMenuExtension(GObject.GObject, Nautilus.MenuProvider):
                 ("jpg", "Sayfaları JPG Görsele Dönüştür (.jpg)"),
             ]:
                 conv_sub.append_item(self._make_item(lbl, f"PDF_CONVERT:{fmt}", paths))
-            top_items.append(conv_parent)
+            root_menu.append_item(conv_parent)
 
-            tools_parent, tools_sub = self._make_submenu("Convext — PDF Araçları")
+            tools_parent, tools_sub = self._make_submenu("PDF Araçları (PDF Tools)")
             tools_sub.append_item(self._make_item("PDF Sıkıştır (Compress PDF)", "PDF_COMPRESS", paths))
             tools_sub.append_item(self._make_item("PDF Sayfalarını Tek Tek Ayır (Split PDF)", "PDF_SPLIT", paths))
             if len(paths) > 1:
                 tools_sub.append_item(self._make_item("Seçili PDF'leri Birleştir (Merge PDFs)", "PDF_MERGE", paths))
             tools_sub.append_item(self._make_item("PDF Yapısını Optimize Et (Organize PDF)", "PDF_ORGANIZE", paths))
             tools_sub.append_item(self._make_item("PDF Metadata Temizle", "STRIP_METADATA", paths))
-            top_items.append(tools_parent)
+            root_menu.append_item(tools_parent)
 
         # 6. DOCUMENTS & E-BOOKS
         elif cat == "doc":
-            conv_parent, conv_sub = self._make_submenu("Convext — Belge Dönüştür")
+            conv_parent, conv_sub = self._make_submenu("Format Dönüştür (Convert Document)")
             for fmt, lbl in [
                 ("pdf", "PDF Belgesine Dönüştür (.pdf)"),
                 ("docx", "Word Belgesine Dönüştür (.docx)"),
@@ -302,11 +344,11 @@ class ConvextMenuExtension(GObject.GObject, Nautilus.MenuProvider):
             ]:
                 if fmt != curr_ext:
                     conv_sub.append_item(self._make_item(lbl, f"DOC_CONVERT:{fmt}", paths))
-            top_items.append(conv_parent)
+            root_menu.append_item(conv_parent)
 
         # 7. SPREADSHEETS
         elif cat == "sheet":
-            conv_parent, conv_sub = self._make_submenu("Convext — Tablo Dönüştür")
+            conv_parent, conv_sub = self._make_submenu("Tablo Dönüştür (Convert Spreadsheet)")
             for fmt, lbl in [
                 ("xlsx", "Excel Tablosuna Dönüştür (.xlsx)"),
                 ("csv", "CSV Tablosuna Dönüştür (.csv)"),
@@ -317,11 +359,11 @@ class ConvextMenuExtension(GObject.GObject, Nautilus.MenuProvider):
             ]:
                 if fmt != curr_ext:
                     conv_sub.append_item(self._make_item(lbl, f"SHEET_CONVERT:{fmt}", paths))
-            top_items.append(conv_parent)
+            root_menu.append_item(conv_parent)
 
         # 8. SLIDES / PRESENTATIONS
         elif cat == "slides":
-            conv_parent, conv_sub = self._make_submenu("Convext — Sunum Dönüştür")
+            conv_parent, conv_sub = self._make_submenu("Sunum Dönüştür (Convert Slides)")
             for fmt, lbl in [
                 ("pdf", "PDF Belgesine Dönüştür (.pdf)"),
                 ("pptx", "PowerPoint'e Dönüştür (.pptx)"),
@@ -331,11 +373,11 @@ class ConvextMenuExtension(GObject.GObject, Nautilus.MenuProvider):
             ]:
                 if fmt != curr_ext:
                     conv_sub.append_item(self._make_item(lbl, f"SLIDES_CONVERT:{fmt}", paths))
-            top_items.append(conv_parent)
+            root_menu.append_item(conv_parent)
 
         # 9. SUBTITLES
         elif cat == "sub":
-            conv_parent, conv_sub = self._make_submenu("Convext — Altyazı Dönüştür")
+            conv_parent, conv_sub = self._make_submenu("Altyazı Dönüştür (Convert Subtitles)")
             for fmt, lbl in [
                 ("vtt", "WebVTT Formatına Dönüştür (.vtt)"),
                 ("srt", "SubRip Formatına Dönüştür (.srt)"),
@@ -343,14 +385,18 @@ class ConvextMenuExtension(GObject.GObject, Nautilus.MenuProvider):
             ]:
                 if fmt != curr_ext:
                     conv_sub.append_item(self._make_item(lbl, f"SUB_CONVERT:{fmt}", paths))
-            top_items.append(conv_parent)
+            root_menu.append_item(conv_parent)
 
-        # ARCHIVE CREATION & FILE ACTIONS
-        act_parent, act_sub = self._make_submenu("Convext — Arşiv & Dosya İşlemleri")
+        # ARCHIVE CREATION SUBMENU (for non-archive files)
         if cat != "archive":
-            act_sub.append_item(self._make_item("ZIP Arşivi Oluştur (.zip)", "ARC_CREATE_ZIP", paths))
-            act_sub.append_item(self._make_item("TAR Arşivi Oluştur (.tar)", "ARC_CREATE_TAR", paths))
-            act_sub.append_item(self._make_item("GZIP Arşivi Oluştur (.tar.gz)", "ARC_CREATE_GZIP", paths))
+            arc_parent, arc_sub = self._make_submenu("Arşiv Araçları (Archive Tools)")
+            arc_sub.append_item(self._make_item("ZIP Arşivi Oluştur (.zip)", "ARC_CREATE_ZIP", paths))
+            arc_sub.append_item(self._make_item("TAR Arşivi Oluştur (.tar)", "ARC_CREATE_TAR", paths))
+            arc_sub.append_item(self._make_item("GZIP Arşivi Oluştur (.tar.gz)", "ARC_CREATE_GZIP", paths))
+            root_menu.append_item(arc_parent)
+
+        # FILE ACTIONS SUBMENU
+        act_parent, act_sub = self._make_submenu("Dosya İşlemleri (File Actions)")
         act_sub.append_item(self._make_item("Toplu Yeniden Adlandır (Batch Rename)...", "ACT_BATCH_RENAME", paths))
         act_sub.append_item(self._make_item("Float Rafına Ekle (Floating Shelf)", "ACT_FLOAT", paths))
         act_sub.append_item(self._make_item("LocalSend / AirDrop ile Gönder", "ACT_AIRDROP", paths))
@@ -358,6 +404,6 @@ class ConvextMenuExtension(GObject.GObject, Nautilus.MenuProvider):
         act_sub.append_item(self._make_item("Convext_Organized Klasörüne Taşı", "ACT_MOVE_ORGANIZED", paths))
         act_sub.append_item(self._make_item("Tam Dosya Yolunu Kopyala (Copy Path)", "ACT_COPY_PATH", paths))
         act_sub.append_item(self._make_item("Burada Terminal Aç", "ACT_TERMINAL", paths))
-        top_items.append(act_parent)
+        root_menu.append_item(act_parent)
 
-        return top_items
+        return [root_item]
