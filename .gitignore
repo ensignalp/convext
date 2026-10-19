@@ -1,0 +1,8 @@
+/target/
+/demo_test_files/
+__pycache__/
+*.pyc
+**/*.rs.bk
+*.swp
+*.swo
+.DS_Store
