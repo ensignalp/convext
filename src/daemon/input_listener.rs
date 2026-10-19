@@ -33,7 +33,7 @@ type Display = libc::c_void;
 type Window = libc::c_ulong;
 
 #[link(name = "X11")]
-extern "C" {
+unsafe extern "C" {
     fn XOpenDisplay(display_name: *const libc::c_char) -> *mut Display;
     fn XDefaultRootWindow(display: *mut Display) -> Window;
     fn XQueryPointer(

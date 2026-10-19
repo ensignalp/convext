@@ -29,7 +29,7 @@ struct XSetWindowAttributes {
 }
 
 #[link(name = "X11")]
-extern "C" {
+unsafe extern "C" {
     fn XOpenDisplay(display_name: *const c_char) -> *mut c_void;
     fn XCloseDisplay(display: *mut c_void) -> c_int;
     fn XInternAtom(display: *mut c_void, atom_name: *const c_char, only_if_exists: c_int) -> c_ulong;
