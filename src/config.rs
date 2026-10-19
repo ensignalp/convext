@@ -1,4 +1,4 @@
-use crate::error::{CitrusError, CitrusResult};
+use crate::error::{ConvextError, ConvextResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -34,7 +34,7 @@ pub struct ConversionPreset {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CitrusConfig {
+pub struct ConvextConfig {
     pub daemon_paused: bool,
     pub auto_reveal_in_file_manager: bool,
     pub wheel_outer_radius: f64,
@@ -46,14 +46,14 @@ pub struct CitrusConfig {
     pub presets: Vec<ConversionPreset>,
 }
 
-impl Default for CitrusConfig {
+impl Default for ConvextConfig {
     fn default() -> Self {
         Self {
             daemon_paused: false,
             auto_reveal_in_file_manager: true,
             wheel_outer_radius: 170.0,
             wheel_inner_radius: 56.0,
-            default_output_suffix: "_citrus".to_string(),
+            default_output_suffix: "_convext".to_string(),
             overwrite_original: false,
             active_preset: "Balanced Web".to_string(),
             shortcuts: ShortcutBindings::default(),
@@ -84,17 +84,17 @@ impl Default for CitrusConfig {
     }
 }
 
-impl CitrusConfig {
+impl ConvextConfig {
     pub fn config_path() -> PathBuf {
         let base = dirs::config_dir().unwrap_or_else(|| PathBuf::from("/tmp"));
-        base.join("citrus-daemon").join("config.toml")
+        base.join("convext").join("config.toml")
     }
 
-    pub fn load_or_create() -> CitrusResult<Self> {
+    pub fn load_or_create() -> ConvextResult<Self> {
         let path = Self::config_path();
         if path.exists() {
             let content = fs::read_to_string(&path)?;
-            toml::from_str(&content).map_err(|e| CitrusError::Config(e.to_string()))
+            toml::from_str(&content).map_err(|e| ConvextError::Config(e.to_string()))
         } else {
             let cfg = Self::default();
             cfg.save()?;
@@ -102,13 +102,13 @@ impl CitrusConfig {
         }
     }
 
-    pub fn save(&self) -> CitrusResult<()> {
+    pub fn save(&self) -> ConvextResult<()> {
         let path = Self::config_path();
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
         let serialized =
-            toml::to_string_pretty(self).map_err(|e| CitrusError::Config(e.to_string()))?;
+            toml::to_string_pretty(self).map_err(|e| ConvextError::Config(e.to_string()))?;
         fs::write(path, serialized)?;
         Ok(())
     }
@@ -183,9 +183,9 @@ impl DependencyCapabilities {
         if missing.is_empty() {
             return;
         }
-        let summary = "Tangerine-Linux: Optional Tools Missing";
+        let summary = "Convext: Eksik Harici Araçlar";
         let body = format!(
-            "Disabled slices requiring: {}. Install them for full offline capabilities.",
+            "Tam çevrimdışı destek için şu paketleri kurabilirsiniz: {}.",
             missing.join(", ")
         );
         let _ = Command::new("gdbus")
@@ -195,7 +195,7 @@ impl DependencyCapabilities {
                 "--dest=org.freedesktop.Notifications",
                 "--object-path=/org/freedesktop/Notifications",
                 "--method=org.freedesktop.Notifications.Notify",
-                "Tangerine-Linux",
+                "Convext",
                 "0",
                 "dialog-information",
                 summary,

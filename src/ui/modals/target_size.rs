@@ -1,5 +1,6 @@
-use crate::daemon::surface_bridge::SurfaceBridge;
 use gtk4::prelude::*;
+use libadwaita as adw;
+use libadwaita::prelude::*;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Copy)]
@@ -14,47 +15,55 @@ impl TargetSizeModal {
     where
         F: Fn(Vec<PathBuf>, TargetSizeSpec, bool) + 'static,
     {
-        let window = gtk4::Window::builder()
+        let window = adw::Window::builder()
             .application(app)
-            .title("Tangerine Exact Target Size")
+            .title("Convext — Hedef Dosya Boyutu")
+            .default_width(420)
+            .default_height(280)
             .build();
-        SurfaceBridge::configure_floating_panel(&window, "Target File Size", 360, 220);
-        window.add_css_class("citrus-modal-window");
 
-        let root = gtk4::Box::new(gtk4::Orientation::Vertical, 12);
-        root.set_margin_top(16);
-        root.set_margin_bottom(16);
-        root.set_margin_start(16);
-        root.set_margin_end(16);
-
-        let title = gtk4::Label::new(Some(if is_video {
-            "Target Video Size (Bitrate Solver)"
+        let toolbar_view = adw::ToolbarView::new();
+        let header_bar = adw::HeaderBar::new();
+        let subtitle = if is_video {
+            "Bitrate Solver (Video)"
         } else {
-            "Target Image Size (Binary Search)"
-        }));
-        title.add_css_class("citrus-header");
-        title.set_halign(gtk4::Align::Start);
-        root.append(&title);
+            "Binary Search (Görsel)"
+        };
+        let win_title = adw::WindowTitle::new("Hedef Boyuta Sıkıştır", subtitle);
+        header_bar.set_title_widget(Some(&win_title));
+        toolbar_view.add_top_bar(&header_bar);
 
-        let input_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
-        let entry = gtk4::Entry::new();
-        entry.add_css_class("citrus-input");
-        entry.set_text(if is_video { "8" } else { "500" });
-        entry.set_hexpand(true);
+        let page = adw::PreferencesPage::new();
+        let group = adw::PreferencesGroup::builder()
+            .title("Hedef Boyut Ayarları")
+            .description("Dosyanın sıkıştırılacağı maksimum boyutu ve birimi seçin")
+            .build();
 
-        let unit_combo = gtk4::DropDown::from_strings(&["KB", "MB"]);
-        unit_combo.set_selected(if is_video { 1 } else { 0 });
+        let entry_row = adw::EntryRow::builder()
+            .title("Hedef Miktar")
+            .text(if is_video { "8" } else { "500" })
+            .build();
 
-        input_row.append(&entry);
-        input_row.append(&unit_combo);
-        root.append(&input_row);
+        let unit_combo = adw::ComboRow::builder()
+            .title("Birim (Unit)")
+            .model(&gtk4::StringList::new(&["KB (Kilobayt)", "MB (Megabayt)"]))
+            .selected(if is_video { 1 } else { 0 })
+            .build();
 
-        let btn_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
-        let cancel_btn = gtk4::Button::with_label("Cancel");
-        cancel_btn.add_css_class("citrus-btn-secondary");
-        let run_btn = gtk4::Button::with_label("Compress to Target");
-        run_btn.add_css_class("citrus-btn-primary");
-        run_btn.set_hexpand(true);
+        group.add(&entry_row);
+        group.add(&unit_combo);
+        page.add(&group);
+
+        let action_group = adw::PreferencesGroup::new();
+        let btn_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 10);
+        btn_box.set_halign(gtk4::Align::End);
+
+        let cancel_btn = gtk4::Button::with_label("İptal");
+        cancel_btn.add_css_class("pill");
+
+        let run_btn = gtk4::Button::with_label("Hedef Boyuta Sıkıştır");
+        run_btn.add_css_class("suggested-action");
+        run_btn.add_css_class("pill");
 
         let win_c = window.clone();
         cancel_btn.connect_clicked(move |_| {
@@ -63,7 +72,7 @@ impl TargetSizeModal {
 
         let win_r = window.clone();
         run_btn.connect_clicked(move |_| {
-            let val: f64 = entry.text().trim().parse().unwrap_or(500.0);
+            let val: f64 = entry_row.text().trim().parse().unwrap_or(500.0);
             let mult: u64 = if unit_combo.selected() == 1 {
                 1024 * 1024
             } else {
@@ -80,11 +89,13 @@ impl TargetSizeModal {
             win_r.close();
         });
 
-        btn_row.append(&cancel_btn);
-        btn_row.append(&run_btn);
-        root.append(&btn_row);
+        btn_box.append(&cancel_btn);
+        btn_box.append(&run_btn);
+        action_group.add(&btn_box);
+        page.add(&action_group);
 
-        window.set_child(Some(&root));
+        toolbar_view.set_content(Some(&page));
+        window.set_content(Some(&toolbar_view));
         window.present();
     }
 }

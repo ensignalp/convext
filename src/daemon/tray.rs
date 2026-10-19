@@ -1,4 +1,4 @@
-use crate::config::CitrusConfig;
+use crate::config::ConvextConfig;
 use crate::daemon::DaemonEvent;
 use async_channel::Sender;
 use std::path::PathBuf;
@@ -7,12 +7,12 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixListener;
 
 pub struct TrayService {
-    config: Arc<RwLock<CitrusConfig>>,
+    config: Arc<RwLock<ConvextConfig>>,
     tx: Sender<DaemonEvent>,
 }
 
 impl TrayService {
-    pub fn new(config: Arc<RwLock<CitrusConfig>>, tx: Sender<DaemonEvent>) -> Self {
+    pub fn new(config: Arc<RwLock<ConvextConfig>>, tx: Sender<DaemonEvent>) -> Self {
         Self { config, tx }
     }
 
@@ -60,7 +60,7 @@ impl TrayService {
                                     let _ = tx_inner.send(DaemonEvent::ToggleFloatShelf).await;
                                     "OK: toggled float shelf\n".to_string()
                                 }
-                                "WHEEL_SHOW" => "OK: Convext context menu mode active (radial window disabled)\n".to_string(),
+                                "WHEEL_SHOW" => "OK: Convext context menu mode active\n".to_string(),
                                 "QUIT" => {
                                     let _ = tx_inner.send(DaemonEvent::QuitDaemon).await;
                                     "OK: quitting\n".to_string()
@@ -83,6 +83,19 @@ impl TrayService {
                                         .await;
                                     format!("OK: selected preset {}\n", preset_name)
                                 }
+                                other if other.starts_with("CONVEXT_STUDIO:") => {
+                                    let payload = other.trim_start_matches("CONVEXT_STUDIO:");
+                                    let files: Vec<PathBuf> = payload
+                                        .split('\t')
+                                        .map(|s| s.trim())
+                                        .filter(|s| !s.is_empty())
+                                        .map(PathBuf::from)
+                                        .collect();
+                                    let _ = tx_inner
+                                        .send(DaemonEvent::ShowConvextStudio { files })
+                                        .await;
+                                    "OK: Convext Studio opened\n".to_string()
+                                }
                                 other if other.starts_with("CONVEXT:") => {
                                     let payload = other.trim_start_matches("CONVEXT:");
                                     let mut parts = payload.split('\t');
@@ -92,7 +105,12 @@ impl TrayService {
                                         .filter(|s| !s.is_empty())
                                         .map(PathBuf::from)
                                         .collect();
-                                    if !action_code.is_empty() && !files.is_empty() {
+                                    if action_code == "OPEN_STUDIO" {
+                                        let _ = tx_inner
+                                            .send(DaemonEvent::ShowConvextStudio { files })
+                                            .await;
+                                        "OK: Convext Studio opened\n".to_string()
+                                    } else if !action_code.is_empty() && !files.is_empty() {
                                         let _ = tx_inner
                                             .send(DaemonEvent::ExecuteConvextCommand {
                                                 action_code: action_code.clone(),
@@ -104,7 +122,7 @@ impl TrayService {
                                         "ERR: invalid CONVEXT payload\n".to_string()
                                     }
                                 }
-                                _ => "ERR: unknown command. Use CONVEXT:<action>\\t<file>, FLOAT_TOGGLE, STATUS, QUIT\n".to_string(),
+                                _ => "ERR: unknown command. Use CONVEXT:<action>\\t<file>, CONVEXT_STUDIO:<file>, FLOAT_TOGGLE, STATUS, QUIT\n".to_string(),
                             };
                             let _ = writer.write_all(response.as_bytes()).await;
                         }
@@ -116,6 +134,6 @@ impl TrayService {
 
     pub fn control_socket_path() -> std::path::PathBuf {
         let runtime_dir = dirs::runtime_dir().unwrap_or_else(|| std::path::PathBuf::from("/tmp"));
-        runtime_dir.join("citrus-daemon-tray.sock")
+        runtime_dir.join("convext-daemon.sock")
     }
 }

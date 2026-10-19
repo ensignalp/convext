@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ==============================================================================
-# Convext Menü — Tek Komutla Otomatik Kurulum Betiği (Linux)
+# Convext — Tek Komutla Otomatik Kurulum Betiği (GNOME / GTK4 / Libadwaita)
 # ==============================================================================
 
 REPO_URL="${CONVEXT_REPO_URL:-https://github.com/mustazafi/convext.git}"
@@ -13,39 +13,37 @@ SYSTEMD_USER_DIR="${HOME}/.config/systemd/user"
 AUTOSTART_DIR="${HOME}/.config/autostart"
 
 echo "================================================================"
-echo "   🚀 Convext Menü — Otomatik Kurulum Başlatılıyor              "
+echo "   🚀 Convext — Otomatik Kurulum Başlatılıyor                   "
 echo "================================================================"
 
-# 1. Sistem Paket Yöneticisini Algıla ve Bağımlılıkları Kur
 install_system_dependencies() {
-    echo "[1/6] Sistem paketleri ve bağımlılıklar kontrol ediliyor..."
+    echo "[1/6] Sistem paketleri ve Libadwaita/GTK4 bağımlılıkları kontrol ediliyor..."
     if command -v dnf >/dev/null 2>&1; then
         sudo dnf install -y \
             gcc pkg-config git curl \
-            gtk4-devel cairo-devel cairo-gobject-devel pango-devel gdk-pixbuf2-devel glib2-devel libX11-devel \
+            gtk4-devel libadwaita-devel cairo-devel cairo-gobject-devel pango-devel gdk-pixbuf2-devel glib2-devel libX11-devel \
             nautilus-python ffmpeg-free qpdf pandoc poppler-utils perl-Image-ExifTool p7zip p7zip-plugins wl-clipboard xclip || true
     elif command -v apt-get >/dev/null 2>&1; then
         sudo apt-get update -y
         sudo apt-get install -y \
             build-essential pkg-config git curl \
-            libgtk-4-dev libcairo2-dev libpango1.0-dev libgdk-pixbuf-2.0-dev libglib2.0-dev libx11-dev \
+            libgtk-4-dev libadwaita-1-dev libcairo2-dev libpango1.0-dev libgdk-pixbuf-2.0-dev libglib2.0-dev libx11-dev \
             python3-nautilus ffmpeg qpdf pandoc poppler-utils libimage-exiftool-perl p7zip-full wl-clipboard xclip || true
     elif command -v pacman >/dev/null 2>&1; then
         sudo pacman -Sy --needed --noconfirm \
             base-devel pkgconf git curl \
-            gtk4 cairo pango gdk-pixbuf2 glib2 libx11 \
+            gtk4 libadwaita cairo pango gdk-pixbuf2 glib2 libx11 \
             nautilus-python ffmpeg qpdf pandoc poppler perl-image-exiftool p7zip wl-clipboard xclip || true
     elif command -v zypper >/dev/null 2>&1; then
         sudo zypper install -y \
             gcc pkg-config git curl \
-            gtk4-devel cairo-devel pango-devel gdk-pixbuf-devel glib2-devel libX11-devel \
+            gtk4-devel libadwaita-devel cairo-devel pango-devel gdk-pixbuf-devel glib2-devel libX11-devel \
             python-nautilus ffmpeg qpdf pandoc poppler-tools exiftool p7zip wl-clipboard xclip || true
     else
         echo "  [!] Paket yöneticisi otomatik algılanamadı, mevcut sistem kütüphaneleri kullanılacak."
     fi
 }
 
-# 2. Rust / Cargo Kontrolü ve Kurulumu
 ensure_rust_toolchain() {
     echo "[2/6] Rust derleme ortamı (cargo) kontrol ediliyor..."
     if ! command -v cargo >/dev/null 2>&1; then
@@ -63,7 +61,6 @@ ensure_rust_toolchain() {
     fi
 }
 
-# 3. Kaynak Kod Dizinini Belirle (Yerel Dizin veya Git Clone)
 prepare_source_directory() {
     echo "[3/6] Kaynak kod hazırlanıyor..."
     if [ -f "./Cargo.toml" ] && [ -f "./assets/convext_menu.py" ]; then
@@ -77,21 +74,21 @@ prepare_source_directory() {
     fi
 }
 
-# 4. Release Derlemesi ve Binary Kurulumu
 build_and_install_binary() {
-    echo "[4/6] Convext motoru (citrus-daemon) derleniyor (Release)..."
+    echo "[4/6] Convext motoru (convext) derleniyor (Release)..."
     mkdir -p "${BIN_DIR}"
     (
         cd "${WORK_DIR}"
         cargo build --release
     )
+    pkill -x "convext" >/dev/null 2>&1 || true
     pkill -x "citrus-daemon" >/dev/null 2>&1 || true
-    cp "${WORK_DIR}/target/release/citrus-daemon" "${BIN_DIR}/citrus-daemon"
-    chmod +x "${BIN_DIR}/citrus-daemon"
-    echo "  -> Binary kuruldu: ${BIN_DIR}/citrus-daemon"
+    rm -f "${BIN_DIR}/citrus-daemon"
+    cp "${WORK_DIR}/target/release/convext" "${BIN_DIR}/convext"
+    chmod +x "${BIN_DIR}/convext"
+    echo "  -> Binary kuruldu: ${BIN_DIR}/convext"
 }
 
-# 5. Nautilus Sağ Tık Eklentisi Kurulumu
 install_nautilus_extension() {
     echo "[5/6] 'Convext Menü' sağ tık eklentisi kuruluyor..."
     mkdir -p "${NAUTILUS_EXT_DIR}"
@@ -100,19 +97,18 @@ install_nautilus_extension() {
     echo "  -> Eklenti kuruldu: ${NAUTILUS_EXT_DIR}/convext_menu.py"
 }
 
-# 6. Arka Plan Servisi (systemd --user & Autostart) ve Nautilus Yenileme
 configure_services_and_start() {
     echo "[6/6] Arka plan servisi etkinleştiriliyor ve Nautilus yenileniyor..."
     mkdir -p "${SYSTEMD_USER_DIR}" "${AUTOSTART_DIR}"
 
     cat > "${SYSTEMD_USER_DIR}/convext.service" <<EOF
 [Unit]
-Description=Convext Menu Background Media & File Engine
+Description=Convext Background Media & File Engine (GTK4 / Libadwaita)
 After=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=${BIN_DIR}/citrus-daemon
+ExecStart=${BIN_DIR}/convext
 Restart=on-failure
 RestartSec=2
 
@@ -120,23 +116,25 @@ RestartSec=2
 WantedBy=default.target
 EOF
 
-    cat > "${AUTOSTART_DIR}/convext-daemon.desktop" <<EOF
+    cat > "${AUTOSTART_DIR}/convext.desktop" <<EOF
 [Desktop Entry]
 Type=Application
-Name=Convext Daemon
-Comment=Convext Right-Click Context Menu Background Engine
-Exec=${BIN_DIR}/citrus-daemon
+Name=Convext
+Comment=Convext Right-Click Context Menu & Libadwaita Studio Engine
+Exec=${BIN_DIR}/convext
 Terminal=false
 X-GNOME-Autostart-enabled=true
 EOF
+
+    rm -f "${AUTOSTART_DIR}/convext-daemon.desktop"
 
     if command -v systemctl >/dev/null 2>&1; then
         systemctl --user daemon-reload >/dev/null 2>&1 || true
         systemctl --user enable --now convext.service >/dev/null 2>&1 || true
     fi
 
-    if ! pgrep -x "citrus-daemon" >/dev/null 2>&1; then
-        setsid "${BIN_DIR}/citrus-daemon" >/tmp/citrus-daemon.log 2>&1 < /dev/null &
+    if ! pgrep -x "convext" >/dev/null 2>&1; then
+        setsid "${BIN_DIR}/convext" >/tmp/convext.log 2>&1 < /dev/null &
     fi
 
     if command -v nautilus >/dev/null 2>&1; then
@@ -153,9 +151,11 @@ configure_services_and_start
 
 echo ""
 echo "================================================================"
-echo " ✅ KURULUM TAMAMLANDI! Convext Menü Kullanıma Hazır."
+echo " ✅ KURULUM TAMAMLANDI! Convext Kullanıma Hazır."
 echo "================================================================"
-echo " • Dosya yöneticisinde (Nautilus) herhangi bir dosyaya veya"
-echo "   çoklu dosya seçimine SAĞ TIKLAYIP 'Convext Menü'yü seçin."
+echo " • Dosya yöneticisinde (Nautilus) herhangi bir dosyaya SAĞ TIKLAYIN:"
+echo "   1) 'Convext Menü (Adwaita Açılır Panel)...' -> Dikey Dropdown'lı"
+echo "      GNOME Libadwaita penceresini açar."
+echo "   2) 'Convext — ...' alt menüleri -> Doğrudan dikey açılır liste."
 echo " • Kaldırmak için: ./uninstall.sh"
 echo "================================================================"

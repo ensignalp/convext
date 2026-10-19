@@ -14,10 +14,9 @@ impl ProgressHud {
     pub fn new(app: &gtk4::Application) -> Self {
         let window = gtk4::Window::builder()
             .application(app)
-            .title("Tangerine Batch Progress")
+            .title("Convext Batch Progress")
             .build();
-        SurfaceBridge::configure_floating_panel(&window, "Tangerine Progress", 340, 115);
-        window.add_css_class("citrus-hud-window");
+        SurfaceBridge::configure_floating_panel(&window, "Convext Progress", 340, 115);
 
         let vbox = gtk4::Box::new(gtk4::Orientation::Vertical, 8);
         vbox.set_margin_top(14);
@@ -26,14 +25,12 @@ impl ProgressHud {
         vbox.set_margin_end(16);
 
         let title_label = gtk4::Label::new(Some("Processing..."));
-        title_label.add_css_class("citrus-header");
         title_label.set_halign(gtk4::Align::Start);
 
         let progress_bar = gtk4::ProgressBar::new();
         progress_bar.set_show_text(true);
 
         let status_label = gtk4::Label::new(Some("Initializing background worker"));
-        status_label.add_css_class("citrus-Subheader");
         status_label.set_halign(gtk4::Align::Start);
         status_label.set_ellipsize(gtk4::pango::EllipsizeMode::End);
 

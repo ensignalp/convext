@@ -1,12 +1,12 @@
 use crate::engine::mime_router::{MediaCategory, MimeRouter};
-use crate::error::{CitrusError, CitrusResult};
+use crate::error::{ConvextError, ConvextResult};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 pub struct PrivacyQrProcessor;
 
 impl PrivacyQrProcessor {
-    pub fn strip_metadata(input: &Path, suffix: &str) -> CitrusResult<PathBuf> {
+    pub fn strip_metadata(input: &Path, suffix: &str) -> ConvextResult<PathBuf> {
         let stem = input.file_stem().and_then(|s| s.to_str()).unwrap_or("clean");
         let ext = input.extension().and_then(|s| s.to_str()).unwrap_or("dat");
         let parent = input.parent().unwrap_or_else(|| Path::new("."));
@@ -31,12 +31,12 @@ impl PrivacyQrProcessor {
         Ok(out)
     }
 
-    pub fn decode_qr_from_image(input: &Path) -> CitrusResult<String> {
+    pub fn decode_qr_from_image(input: &Path) -> ConvextResult<String> {
         let img = image::open(input)?.to_luma8();
         let mut prepared = rqrr::PreparedImage::prepare(img);
         let grids = prepared.detect_grids();
         if grids.is_empty() {
-            return Err(CitrusError::PrivacyQr(
+            return Err(ConvextError::PrivacyQr(
                 "No QR code detected in the selected image.".to_string(),
             ));
         }
@@ -49,7 +49,7 @@ impl PrivacyQrProcessor {
         }
 
         if decoded_payloads.is_empty() {
-            return Err(CitrusError::PrivacyQr(
+            return Err(ConvextError::PrivacyQr(
                 "QR grid found, but payload decoding failed.".to_string(),
             ));
         }

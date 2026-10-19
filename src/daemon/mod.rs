@@ -21,6 +21,9 @@ pub enum DaemonEvent {
     QuickCompressActive,
     TogglePause,
     SelectPreset(String),
+    ShowConvextStudio {
+        files: Vec<PathBuf>,
+    },
     ExecuteConvextCommand {
         action_code: String,
         files: Vec<PathBuf>,

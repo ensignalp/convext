@@ -1,65 +1,47 @@
-use crate::daemon::surface_bridge::SurfaceBridge;
 use gtk4::prelude::*;
+use libadwaita as adw;
+use libadwaita::prelude::*;
 use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
 
 #[derive(Clone)]
 pub struct FloatShelfWindow {
-    pub window: gtk4::Window,
+    pub window: adw::Window,
     pub files: Rc<RefCell<Vec<PathBuf>>>,
     list_box: gtk4::ListBox,
     counter_label: gtk4::Label,
 }
 
 impl FloatShelfWindow {
-    pub fn new<F>(app: &gtk4::Application, on_send_to_wheel: F) -> Self
+    pub fn new<F>(app: &gtk4::Application, on_open_studio: F) -> Self
     where
         F: Fn(Vec<PathBuf>) + 'static,
     {
-        let window = gtk4::Window::builder()
+        let window = adw::Window::builder()
             .application(app)
-            .title("Tangerine Floating Shelf")
+            .title("Convext — Yüzen Dosya Rafı")
+            .default_width(360)
+            .default_height(420)
             .build();
-        SurfaceBridge::configure_floating_panel(&window, "Tangerine Shelf", 320, 380);
-        window.add_css_class("citrus-shelf-window");
 
         let files: Rc<RefCell<Vec<PathBuf>>> = Rc::new(RefCell::new(Vec::new()));
 
+        let toolbar_view = adw::ToolbarView::new();
+        let header_bar = adw::HeaderBar::new();
+        let win_title = adw::WindowTitle::new("Convext Float Rafı", "Sürükle, Topla ve Toplu İşle");
+        header_bar.set_title_widget(Some(&win_title));
+
+        let counter_label = gtk4::Label::new(Some("0 dosya"));
+        counter_label.add_css_class("caption");
+        header_bar.pack_start(&counter_label);
+        toolbar_view.add_top_bar(&header_bar);
+
         let root_box = gtk4::Box::new(gtk4::Orientation::Vertical, 10);
-        root_box.set_margin_top(14);
-        root_box.set_margin_bottom(14);
-        root_box.set_margin_start(14);
-        root_box.set_margin_end(14);
-
-        let header_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
-        let title_lbl = gtk4::Label::new(Some("Floating Shelf"));
-        title_lbl.add_css_class("citrus-header");
-        title_lbl.set_hexpand(true);
-        title_lbl.set_halign(gtk4::Align::Start);
-
-        let counter_label = gtk4::Label::new(Some("0 files"));
-        counter_label.add_css_class("citrus-badge");
-
-        let close_btn = gtk4::Button::with_label("Hide");
-        close_btn.add_css_class("citrus-btn-secondary");
-        let win_hide = window.clone();
-        close_btn.connect_clicked(move |_| {
-            win_hide.set_visible(false);
-        });
-
-        header_box.append(&title_lbl);
-        header_box.append(&counter_label);
-        header_box.append(&close_btn);
-        root_box.append(&header_box);
-
-        let hint_lbl = gtk4::Label::new(Some(
-            "Drop files from any folder to collect them, then drag out or process in batch.",
-        ));
-        hint_lbl.add_css_class("citrus-Subheader");
-        hint_lbl.set_wrap(true);
-        hint_lbl.set_halign(gtk4::Align::Start);
-        root_box.append(&hint_lbl);
+        root_box.set_margin_top(12);
+        root_box.set_margin_bottom(12);
+        root_box.set_margin_start(12);
+        root_box.set_margin_end(12);
 
         let scrolled = gtk4::ScrolledWindow::builder()
             .vexpand(true)
@@ -67,12 +49,12 @@ impl FloatShelfWindow {
             .build();
         let list_box = gtk4::ListBox::new();
         list_box.set_selection_mode(gtk4::SelectionMode::None);
-        list_box.add_css_class("citrus-card");
+        list_box.add_css_class("boxed-list");
         scrolled.set_child(Some(&list_box));
         root_box.append(&scrolled);
 
-        let drag_out_btn = gtk4::Button::with_label("Drag All Files Out");
-        drag_out_btn.add_css_class("citrus-btn-secondary");
+        let drag_out_btn = gtk4::Button::with_label("Tüm Dosyaları Sürükle ve Çıkart");
+        drag_out_btn.add_css_class("pill");
 
         let drag_source = gtk4::DragSource::new();
         drag_source.set_actions(gdk4::DragAction::COPY);
@@ -93,18 +75,21 @@ impl FloatShelfWindow {
         root_box.append(&drag_out_btn);
 
         let action_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
-        let wheel_btn = gtk4::Button::with_label("Open in Radial Wheel");
-        wheel_btn.add_css_class("citrus-btn-primary");
-        wheel_btn.set_hexpand(true);
+        let studio_btn = gtk4::Button::with_label("Convext Menüde Aç");
+        studio_btn.add_css_class("suggested-action");
+        studio_btn.add_css_class("pill");
+        studio_btn.set_hexpand(true);
 
-        let clear_btn = gtk4::Button::with_label("Clear");
-        clear_btn.add_css_class("citrus-btn-danger");
+        let clear_btn = gtk4::Button::with_label("Temizle");
+        clear_btn.add_css_class("destructive-action");
+        clear_btn.add_css_class("pill");
 
-        action_row.append(&wheel_btn);
+        action_row.append(&studio_btn);
         action_row.append(&clear_btn);
         root_box.append(&action_row);
 
-        window.set_child(Some(&root_box));
+        toolbar_view.set_content(Some(&root_box));
+        window.set_content(Some(&toolbar_view));
 
         let shelf = Self {
             window: window.clone(),
@@ -135,12 +120,12 @@ impl FloatShelfWindow {
             shelf_clear.clear();
         });
 
-        let files_wheel = files.clone();
-        let on_wheel_rc = Rc::new(on_send_to_wheel);
-        wheel_btn.connect_clicked(move |_| {
-            let current = files_wheel.borrow().clone();
+        let files_studio = files.clone();
+        let on_studio_rc = Rc::new(on_open_studio);
+        studio_btn.connect_clicked(move |_| {
+            let current = files_studio.borrow().clone();
             if !current.is_empty() {
-                on_wheel_rc(current);
+                on_studio_rc(current);
             }
         });
 
@@ -170,23 +155,23 @@ impl FloatShelfWindow {
         }
         let current = self.files.borrow().clone();
         self.counter_label
-            .set_text(&format!("{} files", current.len()));
+            .set_text(&format!("{} dosya", current.len()));
 
         for path in current {
-            let row = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
-            row.set_margin_top(4);
-            row.set_margin_bottom(4);
             let fname = path
                 .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or("unknown");
-            let lbl = gtk4::Label::new(Some(fname));
-            lbl.set_hexpand(true);
-            lbl.set_halign(gtk4::Align::Start);
-            lbl.set_ellipsize(gtk4::pango::EllipsizeMode::Middle);
+            let row = adw::ActionRow::builder()
+                .title(fname)
+                .subtitle(path.to_string_lossy().as_ref())
+                .build();
 
-            let remove_btn = gtk4::Button::with_label("×");
-            remove_btn.add_css_class("citrus-btn-secondary");
+            let remove_btn = gtk4::Button::builder()
+                .label("×")
+                .valign(gtk4::Align::Center)
+                .build();
+            remove_btn.add_css_class("flat");
             let shelf_rm = self.clone();
             let path_rm = path.clone();
             remove_btn.connect_clicked(move |_| {
@@ -194,8 +179,7 @@ impl FloatShelfWindow {
                 shelf_rm.rebuild_list();
             });
 
-            row.append(&lbl);
-            row.append(&remove_btn);
+            row.add_suffix(&remove_btn);
             self.list_box.append(&row);
         }
     }

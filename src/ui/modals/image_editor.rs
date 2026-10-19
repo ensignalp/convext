@@ -1,5 +1,6 @@
-use crate::daemon::surface_bridge::SurfaceBridge;
 use gtk4::prelude::*;
+use libadwaita as adw;
+use libadwaita::prelude::*;
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -37,12 +38,12 @@ impl ImageEditorModal {
     where
         F: Fn(PathBuf, Vec<RedactionBox>) + 'static,
     {
-        let window = gtk4::Window::builder()
+        let window = adw::Window::builder()
             .application(app)
-            .title("Tangerine Image Redactor & Crop")
+            .title("Convext — Görsel Sansürleme & Kırpma")
+            .default_width(720)
+            .default_height(560)
             .build();
-        SurfaceBridge::configure_floating_panel(&window, "Edit & Redact", 680, 540);
-        window.add_css_class("citrus-modal-window");
 
         let pixbuf = gdk4::gdk_pixbuf::Pixbuf::from_file(&file_path).ok();
         let (img_width, img_height) = Self::read_dimensions(&file_path);
@@ -57,46 +58,44 @@ impl ImageEditorModal {
             pixbuf,
         }));
 
+        let toolbar_view = adw::ToolbarView::new();
+        let header_bar = adw::HeaderBar::new();
+        let win_title = adw::WindowTitle::new(
+            "Convext Görsel Düzenleyici",
+            "Kalıcı Piksel Sansürleme (Pixelate / Blackout) & Kırpma",
+        );
+        header_bar.set_title_widget(Some(&win_title));
+
+        let btn_pixelate = gtk4::Button::with_label("Mozaik (Pixelate)");
+        btn_pixelate.add_css_class("suggested-action");
+        let btn_blackout = gtk4::Button::with_label("Karart (Blackout)");
+        let btn_crop = gtk4::Button::with_label("Kırp (Crop)");
+        let btn_undo = gtk4::Button::with_label("Geri Al");
+
+        header_bar.pack_start(&btn_pixelate);
+        header_bar.pack_start(&btn_blackout);
+        header_bar.pack_start(&btn_crop);
+        header_bar.pack_end(&btn_undo);
+        toolbar_view.add_top_bar(&header_bar);
+
         let root = gtk4::Box::new(gtk4::Orientation::Vertical, 10);
-        root.set_margin_top(14);
-        root.set_margin_bottom(14);
-        root.set_margin_start(14);
-        root.set_margin_end(14);
-
-        let toolbar = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
-        let title_lbl = gtk4::Label::new(Some("Destructive Pixel Redactor"));
-        title_lbl.add_css_class("citrus-header");
-        title_lbl.set_hexpand(true);
-        title_lbl.set_halign(gtk4::Align::Start);
-
-        let btn_pixelate = gtk4::Button::with_label("Pixelate");
-        btn_pixelate.add_css_class("citrus-btn-primary");
-        let btn_blackout = gtk4::Button::with_label("Blackout");
-        btn_blackout.add_css_class("citrus-btn-secondary");
-        let btn_crop = gtk4::Button::with_label("Crop");
-        btn_crop.add_css_class("citrus-btn-secondary");
-        let btn_undo = gtk4::Button::with_label("Undo");
-        btn_undo.add_css_class("citrus-btn-secondary");
-
-        toolbar.append(&title_lbl);
-        toolbar.append(&btn_pixelate);
-        toolbar.append(&btn_blackout);
-        toolbar.append(&btn_crop);
-        toolbar.append(&btn_undo);
-        root.append(&toolbar);
+        root.set_margin_top(12);
+        root.set_margin_bottom(12);
+        root.set_margin_start(12);
+        root.set_margin_end(12);
 
         let canvas = gtk4::DrawingArea::builder()
-            .content_width(640)
-            .content_height(410)
+            .content_width(660)
+            .content_height(430)
             .vexpand(true)
             .hexpand(true)
             .build();
-        canvas.add_css_class("citrus-card");
+        canvas.add_css_class("card");
 
         let st_draw = state.clone();
         canvas.set_draw_func(move |_, cr, w, h| {
             let st = st_draw.borrow();
-            cr.set_source_rgba(0.08, 0.08, 0.10, 1.0);
+            cr.set_source_rgba(0.11, 0.11, 0.13, 1.0);
             let _ = cr.paint();
 
             let scale_x = w as f64 / st.img_width.max(1) as f64;
@@ -124,11 +123,11 @@ impl ImageEditorModal {
                 cr.rectangle(rx, ry, rw, rh);
                 match b.tool {
                     RedactionTool::Blackout => cr.set_source_rgba(0.0, 0.0, 0.0, 0.92),
-                    RedactionTool::Pixelate => cr.set_source_rgba(1.0, 0.58, 0.0, 0.45),
+                    RedactionTool::Pixelate => cr.set_source_rgba(0.21, 0.52, 0.89, 0.45),
                     RedactionTool::Crop => cr.set_source_rgba(0.2, 0.85, 0.45, 0.32),
                 }
                 let _ = cr.fill_preserve();
-                cr.set_source_rgba(1.0, 0.75, 0.2, 0.95);
+                cr.set_source_rgba(0.38, 0.63, 0.92, 0.95);
                 cr.set_line_width(1.8);
                 let _ = cr.stroke();
             }
@@ -139,9 +138,9 @@ impl ImageEditorModal {
                 let rw = (x1 - x0).abs();
                 let rh = (y1 - y0).abs();
                 cr.rectangle(rx, ry, rw, rh);
-                cr.set_source_rgba(1.0, 0.58, 0.0, 0.30);
+                cr.set_source_rgba(0.21, 0.52, 0.89, 0.30);
                 let _ = cr.fill_preserve();
-                cr.set_source_rgba(1.0, 0.58, 0.0, 0.95);
+                cr.set_source_rgba(0.21, 0.52, 0.89, 0.95);
                 cr.set_line_width(2.0);
                 let _ = cr.stroke();
             }
@@ -225,12 +224,13 @@ impl ImageEditorModal {
             cv_undo.queue_draw();
         });
 
-        let footer = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
-        let cancel_btn = gtk4::Button::with_label("Cancel");
-        cancel_btn.add_css_class("citrus-btn-secondary");
-        let apply_btn = gtk4::Button::with_label("Burn & Save Redacted Image");
-        apply_btn.add_css_class("citrus-btn-primary");
-        apply_btn.set_hexpand(true);
+        let footer = gtk4::Box::new(gtk4::Orientation::Horizontal, 10);
+        footer.set_halign(gtk4::Align::End);
+        let cancel_btn = gtk4::Button::with_label("İptal");
+        cancel_btn.add_css_class("pill");
+        let apply_btn = gtk4::Button::with_label("Uygula ve Kaydet");
+        apply_btn.add_css_class("suggested-action");
+        apply_btn.add_css_class("pill");
 
         let win_cancel = window.clone();
         cancel_btn.connect_clicked(move |_| {
@@ -249,7 +249,8 @@ impl ImageEditorModal {
         footer.append(&apply_btn);
         root.append(&footer);
 
-        window.set_child(Some(&root));
+        toolbar_view.set_content(Some(&root));
+        window.set_content(Some(&toolbar_view));
         window.present();
     }
 

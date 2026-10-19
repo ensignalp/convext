@@ -7,7 +7,7 @@ mod engine;
 mod error;
 mod ui;
 
-use crate::config::{CitrusConfig, DependencyCapabilities};
+use crate::config::{ConvextConfig, DependencyCapabilities};
 use crate::daemon::tray::TrayService;
 use crate::daemon::DaemonEvent;
 use crate::desktop::actions::DesktopActions;
@@ -21,7 +21,8 @@ use crate::engine::pdf_proc::PdfProcessor;
 use crate::engine::privacy_qr::PrivacyQrProcessor;
 use crate::engine::video_proc::VideoProcessor;
 use crate::engine::EngineProgress;
-use crate::error::{CitrusError, CitrusResult};
+use crate::error::{ConvextError, ConvextResult};
+use crate::ui::convext_studio::ConvextStudioWindow;
 use crate::ui::float_shelf::FloatShelfWindow;
 use crate::ui::modals::batch_rename::BatchRenameModal;
 use crate::ui::modals::image_editor::ImageEditorModal;
@@ -29,6 +30,7 @@ use crate::ui::modals::media_trimmer::MediaTrimmerModal;
 use crate::ui::modals::target_size::TargetSizeModal;
 use async_channel::Sender;
 use gtk4::prelude::*;
+use libadwaita as adw;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::os::unix::io::AsRawFd;
@@ -41,9 +43,9 @@ struct SingleInstanceGuard {
 }
 
 impl SingleInstanceGuard {
-    fn acquire() -> CitrusResult<Self> {
+    fn acquire() -> ConvextResult<Self> {
         let runtime_dir = dirs::runtime_dir().unwrap_or_else(|| PathBuf::from("/tmp"));
-        let lock_path = runtime_dir.join("citrus-daemon.lock");
+        let lock_path = runtime_dir.join("convext-daemon.lock");
         let file = OpenOptions::new()
             .create(true)
             .read(true)
@@ -52,8 +54,8 @@ impl SingleInstanceGuard {
         let fd = file.as_raw_fd();
         let rc = unsafe { libc::flock(fd, libc::LOCK_EX | libc::LOCK_NB) };
         if rc != 0 {
-            return Err(CitrusError::InstanceLock(
-                "Another instance of citrus-daemon is already running.".to_string(),
+            return Err(ConvextError::InstanceLock(
+                "Another instance of convext is already running.".to_string(),
             ));
         }
         Ok(Self { _file: file })
@@ -77,10 +79,28 @@ fn dispatch_convext_command(
     shelf: &FloatShelfWindow,
     action_code: &str,
     files: Vec<PathBuf>,
-    config: Arc<RwLock<CitrusConfig>>,
+    config: Arc<RwLock<ConvextConfig>>,
     prog_tx: Sender<EngineProgress>,
 ) {
     if files.is_empty() {
+        return;
+    }
+
+    if action_code == "OPEN_STUDIO" {
+        let app_c = app.clone();
+        let shelf_c = shelf.clone();
+        let cfg_c = config.clone();
+        let tx_c = prog_tx.clone();
+        ConvextStudioWindow::show(app, files, move |selected_code, target_files| {
+            dispatch_convext_command(
+                &app_c,
+                &shelf_c,
+                &selected_code,
+                target_files,
+                cfg_c.clone(),
+                tx_c.clone(),
+            );
+        });
         return;
     }
 
@@ -706,7 +726,7 @@ fn dispatch_batch_action(
     shelf: &FloatShelfWindow,
     action: SliceAction,
     files: Vec<PathBuf>,
-    config: Arc<RwLock<CitrusConfig>>,
+    config: Arc<RwLock<ConvextConfig>>,
     prog_tx: Sender<EngineProgress>,
 ) {
     let active_files = if files.is_empty() {
@@ -728,7 +748,7 @@ fn dispatch_batch_action(
         SliceAction::ActionCopyPath => {
             DesktopActions::copy_paths_to_clipboard(&active_files);
             DesktopActions::send_desktop_notification(
-                "Convext - Yol Kopyalandı",
+                "Convext — Yol Kopyalandı",
                 "Dosya yolu panoya kopyalandı.",
             );
         }
@@ -949,7 +969,7 @@ async fn execute_silent_background_action(
         },
         per_file_action => {
             for path in &files {
-                let single_res: CitrusResult<Vec<PathBuf>> = match &per_file_action {
+                let single_res: ConvextResult<Vec<PathBuf>> = match &per_file_action {
                     SliceAction::ImageConvert { format } => {
                         ImageProcessor::convert_format(path, format, &suffix).map(|o| vec![o])
                     }
@@ -1066,7 +1086,7 @@ fn try_send_cli_convext(action_code: &str, files: &[String]) -> bool {
     false
 }
 
-fn main() -> CitrusResult<()> {
+fn main() -> ConvextResult<()> {
     let args: Vec<String> = std::env::args().collect();
     if args.len() >= 4 && args[1] == "--convext" {
         let action_code = &args[2];
@@ -1074,7 +1094,6 @@ fn main() -> CitrusResult<()> {
         if try_send_cli_convext(action_code, file_args) {
             return Ok(());
         }
-        // If daemon is not running yet, spawn it in background and send command
         if let Ok(exe) = std::env::current_exe() {
             let _ = std::process::Command::new(exe)
                 .stdin(std::process::Stdio::null())
@@ -1092,7 +1111,7 @@ fn main() -> CitrusResult<()> {
     }
 
     let _instance_guard = SingleInstanceGuard::acquire()?;
-    let config = Arc::new(RwLock::new(CitrusConfig::load_or_create()?));
+    let config = Arc::new(RwLock::new(ConvextConfig::load_or_create()?));
     let _capabilities = Arc::new(DependencyCapabilities::probe_system());
 
     let rt = tokio::runtime::Builder::new_multi_thread()
@@ -1106,17 +1125,21 @@ fn main() -> CitrusResult<()> {
     let tray = TrayService::new(config.clone(), tx.clone());
     tray.spawn();
 
+    let _ = adw::init();
+    let style_mgr = adw::StyleManager::default();
+    style_mgr.set_color_scheme(adw::ColorScheme::PreferDark);
+
     let app = gtk4::Application::builder()
-        .application_id("org.tangerine.CitrusDaemon")
+        .application_id("org.convext.Daemon")
         .build();
 
     let config_activate = config.clone();
     let prog_tx_activate = prog_tx.clone();
+    let tx_activate = tx.clone();
 
     app.connect_activate(move |app| {
         load_css();
 
-        // Hold application in background without opening any circular window
         let hold_guard = app.hold();
         Box::leak(Box::new(hold_guard));
 
@@ -1141,7 +1164,10 @@ fn main() -> CitrusResult<()> {
             }
         });
 
-        let shelf = FloatShelfWindow::new(app, move |_files| {});
+        let tx_shelf = tx_activate.clone();
+        let shelf = FloatShelfWindow::new(app, move |files| {
+            let _ = tx_shelf.send_blocking(DaemonEvent::ShowConvextStudio { files });
+        });
 
         let rx_loop = rx.clone();
         let shelf_loop = shelf.clone();
@@ -1152,6 +1178,22 @@ fn main() -> CitrusResult<()> {
         glib::spawn_future_local(async move {
             while let Ok(ev) = rx_loop.recv().await {
                 match ev {
+                    DaemonEvent::ShowConvextStudio { files } => {
+                        let app_c = app_clone.clone();
+                        let shelf_c = shelf_loop.clone();
+                        let cfg_c = config_loop.clone();
+                        let tx_c = prog_tx_loop.clone();
+                        ConvextStudioWindow::show(&app_clone, files, move |code, target_files| {
+                            dispatch_convext_command(
+                                &app_c,
+                                &shelf_c,
+                                &code,
+                                target_files,
+                                cfg_c.clone(),
+                                tx_c.clone(),
+                            );
+                        });
+                    }
                     DaemonEvent::ExecuteConvextCommand { action_code, files } => {
                         let paused = config_loop
                             .read()

@@ -3,7 +3,7 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 #[allow(dead_code)]
-pub enum CitrusError {
+pub enum ConvextError {
     #[error("I/O operation failed: {0}")]
     Io(#[from] std::io::Error),
 
@@ -41,4 +41,4 @@ pub enum CitrusError {
     InvalidInput(String),
 }
 
-pub type CitrusResult<T> = Result<T, CitrusError>;
+pub type ConvextResult<T> = Result<T, ConvextError>;

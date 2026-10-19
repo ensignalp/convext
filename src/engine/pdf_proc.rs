@@ -1,5 +1,5 @@
 use crate::engine::doc_proc::DocProcessor;
-use crate::error::{CitrusError, CitrusResult};
+use crate::error::{ConvextError, ConvextResult};
 use image::codecs::jpeg::JpegEncoder;
 use image::GenericImageView;
 use std::io::Write;
@@ -21,7 +21,7 @@ impl PdfProcessor {
         input: &Path,
         format: &str,
         suffix: &str,
-    ) -> CitrusResult<Vec<PathBuf>> {
+    ) -> ConvextResult<Vec<PathBuf>> {
         let fmt = format.to_ascii_lowercase();
         let stem = input.file_stem().and_then(|s| s.to_str()).unwrap_or("pdf");
         let parent = input.parent().unwrap_or_else(|| Path::new("."));
@@ -35,12 +35,12 @@ impl PdfProcessor {
                     .arg(input)
                     .arg(&prefix)
                     .status()
-                    .map_err(|e| CitrusError::ExternalBinary {
+                    .map_err(|e| ConvextError::ExternalBinary {
                         binary: "pdftoppm".to_string(),
                         reason: e.to_string(),
                     })?;
                 if !status.success() {
-                    return Err(CitrusError::Pdf("pdftoppm rasterization failed".to_string()));
+                    return Err(ConvextError::Pdf("pdftoppm rasterization failed".to_string()));
                 }
                 let mut outs = Vec::new();
                 let prefix_name = format!("{}{}_page", stem, suffix);
@@ -80,9 +80,9 @@ impl PdfProcessor {
         }
     }
 
-    pub fn merge_pdfs(inputs: &[PathBuf], suffix: &str) -> CitrusResult<PathBuf> {
+    pub fn merge_pdfs(inputs: &[PathBuf], suffix: &str) -> ConvextResult<PathBuf> {
         let first = inputs.first().ok_or_else(|| {
-            CitrusError::InvalidInput("At least one PDF is required to merge.".to_string())
+            ConvextError::InvalidInput("At least one PDF is required to merge.".to_string())
         })?;
         let out = Self::default_output(first, suffix);
         let mut cmd = Command::new("qpdf");
@@ -92,19 +92,19 @@ impl PdfProcessor {
         }
         cmd.arg("--").arg(&out);
 
-        let output = cmd.output().map_err(|e| CitrusError::ExternalBinary {
+        let output = cmd.output().map_err(|e| ConvextError::ExternalBinary {
             binary: "qpdf".to_string(),
             reason: e.to_string(),
         })?;
         if !output.status.success() {
-            return Err(CitrusError::Pdf(
+            return Err(ConvextError::Pdf(
                 String::from_utf8_lossy(&output.stderr).to_string(),
             ));
         }
         Ok(out)
     }
 
-    pub fn split_pdf_pages(input: &Path) -> CitrusResult<Vec<PathBuf>> {
+    pub fn split_pdf_pages(input: &Path) -> ConvextResult<Vec<PathBuf>> {
         let stem = input.file_stem().and_then(|s| s.to_str()).unwrap_or("page");
         let parent = input.parent().unwrap_or_else(|| Path::new("."));
         let pattern = parent.join(format!("{}_page_%d.pdf", stem));
@@ -114,13 +114,13 @@ impl PdfProcessor {
             .arg(input)
             .arg(&pattern)
             .output()
-            .map_err(|e| CitrusError::ExternalBinary {
+            .map_err(|e| ConvextError::ExternalBinary {
                 binary: "qpdf".to_string(),
                 reason: e.to_string(),
             })?;
 
         if !output.status.success() {
-            return Err(CitrusError::Pdf(
+            return Err(ConvextError::Pdf(
                 String::from_utf8_lossy(&output.stderr).to_string(),
             ));
         }
@@ -141,9 +141,9 @@ impl PdfProcessor {
         Ok(generated)
     }
 
-    pub fn images_to_pdf_collage(inputs: &[PathBuf], suffix: &str) -> CitrusResult<PathBuf> {
+    pub fn images_to_pdf_collage(inputs: &[PathBuf], suffix: &str) -> ConvextResult<PathBuf> {
         let first = inputs.first().ok_or_else(|| {
-            CitrusError::InvalidInput("No images provided for PDF collage.".to_string())
+            ConvextError::InvalidInput("No images provided for PDF collage.".to_string())
         })?;
         let out = Self::default_output(first, suffix);
 
@@ -162,13 +162,13 @@ impl PdfProcessor {
         Ok(out)
     }
 
-    pub fn destructive_redact_pdf(input: &Path, suffix: &str) -> CitrusResult<PathBuf> {
+    pub fn destructive_redact_pdf(input: &Path, suffix: &str) -> ConvextResult<PathBuf> {
         let out = Self::default_output(input, suffix);
         std::fs::copy(input, &out)?;
         Ok(out)
     }
 
-    fn write_multi_jpeg_pdf(out_path: &Path, pages: &[(u32, u32, Vec<u8>)]) -> CitrusResult<()> {
+    fn write_multi_jpeg_pdf(out_path: &Path, pages: &[(u32, u32, Vec<u8>)]) -> ConvextResult<()> {
         let mut buf: Vec<u8> = Vec::new();
         buf.extend_from_slice(b"%PDF-1.4\n%\xE2\xE3\xCF\xD3\n");
 
@@ -253,7 +253,7 @@ impl PdfProcessor {
 }
 
 impl PdfProcessor {
-    pub fn compress_pdf(input: &Path, suffix: &str) -> CitrusResult<PathBuf> {
+    pub fn compress_pdf(input: &Path, suffix: &str) -> ConvextResult<PathBuf> {
         let out = Self::default_output(input, suffix);
         let qpdf_ok = Command::new("qpdf")
             .args(["--stream-data=compress", "--recompress-flate", "--compression-level=9"])
@@ -269,7 +269,7 @@ impl PdfProcessor {
         Ok(out)
     }
 
-    pub fn organize_linearize_pdf(input: &Path, suffix: &str) -> CitrusResult<PathBuf> {
+    pub fn organize_linearize_pdf(input: &Path, suffix: &str) -> ConvextResult<PathBuf> {
         let out = Self::default_output(input, suffix);
         let qpdf_ok = Command::new("qpdf")
             .arg("--linearize")

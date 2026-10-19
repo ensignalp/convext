@@ -1,5 +1,5 @@
 use crate::engine::video_proc::VideoProcessor;
-use crate::error::{CitrusError, CitrusResult};
+use crate::error::{ConvextError, ConvextResult};
 use crate::ui::modals::media_trimmer::TrimParameters;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -18,7 +18,7 @@ impl AudioProcessor {
         parent.join(format!("{}{}.{}", stem, suffix, ext))
     }
 
-    pub fn convert_format(input: &Path, format: &str, suffix: &str) -> CitrusResult<PathBuf> {
+    pub fn convert_format(input: &Path, format: &str, suffix: &str) -> ConvextResult<PathBuf> {
         let fmt = format.to_ascii_lowercase();
         let out = Self::default_output(input, suffix, &fmt);
         let in_str = input.to_string_lossy().to_string();
@@ -38,7 +38,7 @@ impl AudioProcessor {
         Ok(out)
     }
 
-    pub fn normalize_ebu_r128(input: &Path, suffix: &str) -> CitrusResult<PathBuf> {
+    pub fn normalize_ebu_r128(input: &Path, suffix: &str) -> ConvextResult<PathBuf> {
         let ext = input
             .extension()
             .and_then(|e| e.to_str())
@@ -59,7 +59,7 @@ impl AudioProcessor {
         input: &Path,
         params: &TrimParameters,
         suffix: &str,
-    ) -> CitrusResult<PathBuf> {
+    ) -> ConvextResult<PathBuf> {
         let ext = input
             .extension()
             .and_then(|e| e.to_str())
@@ -92,7 +92,7 @@ impl AudioProcessor {
         bleep_start: f64,
         bleep_end: f64,
         suffix: &str,
-    ) -> CitrusResult<PathBuf> {
+    ) -> ConvextResult<PathBuf> {
         let ext = input
             .extension()
             .and_then(|e| e.to_str())
@@ -117,14 +117,14 @@ impl AudioProcessor {
         Ok(out)
     }
 
-    pub fn bleep_middle_segment(input: &Path, suffix: &str) -> CitrusResult<PathBuf> {
+    pub fn bleep_middle_segment(input: &Path, suffix: &str) -> ConvextResult<PathBuf> {
         let duration = VideoProcessor::probe_duration_secs(input).unwrap_or(6.0);
         let b_start = (duration * 0.35).max(0.2);
         let b_end = (b_start + 1.2).min(duration);
         Self::apply_sine_bleep(input, b_start, b_end, suffix)
     }
 
-    pub fn toggle_mono_stereo(input: &Path, suffix: &str) -> CitrusResult<PathBuf> {
+    pub fn toggle_mono_stereo(input: &Path, suffix: &str) -> ConvextResult<PathBuf> {
         let ext = input
             .extension()
             .and_then(|e| e.to_str())
@@ -143,7 +143,7 @@ impl AudioProcessor {
         Ok(out)
     }
 
-    fn probe_channels(input: &Path) -> CitrusResult<u32> {
+    fn probe_channels(input: &Path) -> ConvextResult<u32> {
         let output = Command::new("ffprobe")
             .args([
                 "-v",
@@ -157,7 +157,7 @@ impl AudioProcessor {
             ])
             .arg(input)
             .output()
-            .map_err(|e| CitrusError::ExternalBinary {
+            .map_err(|e| ConvextError::ExternalBinary {
                 binary: "ffprobe".to_string(),
                 reason: e.to_string(),
             })?;
@@ -165,16 +165,16 @@ impl AudioProcessor {
         Ok(s.trim().parse::<u32>().unwrap_or(2))
     }
 
-    fn run_ffmpeg(args: &[&str]) -> CitrusResult<()> {
+    fn run_ffmpeg(args: &[&str]) -> ConvextResult<()> {
         let output = Command::new("ffmpeg").args(args).output().map_err(|e| {
-            CitrusError::ExternalBinary {
+            ConvextError::ExternalBinary {
                 binary: "ffmpeg".to_string(),
                 reason: e.to_string(),
             }
         })?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            return Err(CitrusError::ExternalBinary {
+            return Err(ConvextError::ExternalBinary {
                 binary: "ffmpeg".to_string(),
                 reason: stderr,
             });
@@ -184,7 +184,7 @@ impl AudioProcessor {
 }
 
 impl AudioProcessor {
-    pub fn compress_audio(input: &Path, suffix: &str) -> CitrusResult<PathBuf> {
+    pub fn compress_audio(input: &Path, suffix: &str) -> ConvextResult<PathBuf> {
         let out = Self::default_output(input, suffix, "mp3");
         Self::run_ffmpeg(&[
             "-y",
@@ -199,7 +199,7 @@ impl AudioProcessor {
         Ok(out)
     }
 
-    pub fn visualize_waveform_mp4(input: &Path, suffix: &str) -> CitrusResult<PathBuf> {
+    pub fn visualize_waveform_mp4(input: &Path, suffix: &str) -> ConvextResult<PathBuf> {
         let out = Self::default_output(input, suffix, "mp4");
         Self::run_ffmpeg(&[
             "-y",

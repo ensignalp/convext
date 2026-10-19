@@ -1,4 +1,4 @@
-use crate::error::{CitrusError, CitrusResult};
+use crate::error::{ConvextError, ConvextResult};
 use gtk4::prelude::*;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -22,7 +22,7 @@ impl DesktopActions {
         Self::copy_text_to_clipboard(&joined);
     }
 
-    pub fn open_terminal_in_folder(target: &Path) -> CitrusResult<()> {
+    pub fn open_terminal_in_folder(target: &Path) -> ConvextResult<()> {
         let dir = if target.is_dir() {
             target
         } else {
@@ -52,11 +52,11 @@ impl DesktopActions {
         Command::new("x-terminal-emulator")
             .current_dir(dir)
             .spawn()
-            .map_err(|e| CitrusError::Desktop(format!("Could not launch terminal: {}", e)))?;
+            .map_err(|e| ConvextError::Desktop(format!("Could not launch terminal: {}", e)))?;
         Ok(())
     }
 
-    pub fn send_via_localsend(paths: &[PathBuf]) -> CitrusResult<()> {
+    pub fn send_via_localsend(paths: &[PathBuf]) -> ConvextResult<()> {
         if paths.is_empty() {
             return Ok(());
         }
@@ -64,7 +64,7 @@ impl DesktopActions {
         for p in paths {
             cmd.arg(p);
         }
-        cmd.spawn().map_err(|e| CitrusError::ExternalBinary {
+        cmd.spawn().map_err(|e| ConvextError::ExternalBinary {
             binary: "localsend_app".to_string(),
             reason: e.to_string(),
         })?;
@@ -79,7 +79,7 @@ impl DesktopActions {
                 "--dest=org.freedesktop.Notifications",
                 "--object-path=/org/freedesktop/Notifications",
                 "--method=org.freedesktop.Notifications.Notify",
-                "Tangerine-Linux",
+                "Convext",
                 "0",
                 "emblem-ok-symbolic",
                 summary,
@@ -93,7 +93,7 @@ impl DesktopActions {
 }
 
 impl DesktopActions {
-    pub fn duplicate_files(files: &[PathBuf], suffix: &str) -> CitrusResult<Vec<PathBuf>> {
+    pub fn duplicate_files(files: &[PathBuf], suffix: &str) -> ConvextResult<Vec<PathBuf>> {
         let mut outs = Vec::new();
         for p in files {
             if p.is_file() {
@@ -112,11 +112,11 @@ impl DesktopActions {
         Ok(outs)
     }
 
-    pub fn move_files_to_organized(files: &[PathBuf]) -> CitrusResult<Vec<PathBuf>> {
+    pub fn move_files_to_organized(files: &[PathBuf]) -> ConvextResult<Vec<PathBuf>> {
         let mut outs = Vec::new();
         for p in files {
             let parent = p.parent().unwrap_or_else(|| Path::new("."));
-            let target_dir = parent.join("Tangerine_Moved");
+            let target_dir = parent.join("Convext_Organized");
             std::fs::create_dir_all(&target_dir)?;
             if let Some(fname) = p.file_name() {
                 let dest = target_dir.join(fname);

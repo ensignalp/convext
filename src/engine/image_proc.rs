@@ -1,5 +1,5 @@
 use crate::engine::pdf_proc::PdfProcessor;
-use crate::error::{CitrusError, CitrusResult};
+use crate::error::{ConvextError, ConvextResult};
 use crate::ui::modals::image_editor::{RedactionBox, RedactionTool};
 use image::codecs::jpeg::JpegEncoder;
 use image::{DynamicImage, GenericImageView, ImageFormat, Rgba, RgbaImage};
@@ -22,7 +22,7 @@ impl ImageProcessor {
         parent.join(format!("{}{}.{}", stem, suffix, ext))
     }
 
-    pub fn convert_format(input: &Path, format: &str, suffix: &str) -> CitrusResult<PathBuf> {
+    pub fn convert_format(input: &Path, format: &str, suffix: &str) -> ConvextResult<PathBuf> {
         let clean_ext = format.to_ascii_lowercase();
         if clean_ext == "pdf" {
             return PdfProcessor::images_to_pdf_collage(&[input.to_path_buf()], suffix);
@@ -58,7 +58,7 @@ impl ImageProcessor {
         Ok(out)
     }
 
-    fn convert_via_magick_or_ffmpeg(input: &Path, out: &Path) -> CitrusResult<()> {
+    fn convert_via_magick_or_ffmpeg(input: &Path, out: &Path) -> ConvextResult<()> {
         if let Ok(status) = Command::new("magick").arg(input).arg(out).status() {
             if status.success() {
                 return Ok(());
@@ -69,20 +69,20 @@ impl ImageProcessor {
             .arg(input)
             .arg(out)
             .status()
-            .map_err(|e| CitrusError::ExternalBinary {
+            .map_err(|e| ConvextError::ExternalBinary {
                 binary: "magick/ffmpeg".to_string(),
                 reason: e.to_string(),
             })?;
         if status.success() {
             Ok(())
         } else {
-            Err(CitrusError::InvalidInput(
+            Err(ConvextError::InvalidInput(
                 "External image conversion failed.".to_string(),
             ))
         }
     }
 
-    pub fn compress_percentage(input: &Path, quality: u8, suffix: &str) -> CitrusResult<PathBuf> {
+    pub fn compress_percentage(input: &Path, quality: u8, suffix: &str) -> ConvextResult<PathBuf> {
         let img = image::open(input)?;
         let out = Self::output_path_with_ext(input, suffix, "jpg");
         let file = File::create(&out)?;
@@ -97,7 +97,7 @@ impl ImageProcessor {
         input: &Path,
         target_bytes: u64,
         suffix: &str,
-    ) -> CitrusResult<PathBuf> {
+    ) -> ConvextResult<PathBuf> {
         let orig = image::open(input)?;
         let out = Self::output_path_with_ext(input, suffix, "jpg");
         let mut best_buf: Vec<u8> = Vec::new();
@@ -150,7 +150,7 @@ impl ImageProcessor {
         }
 
         if best_buf.is_empty() {
-            return Err(CitrusError::InvalidInput(
+            return Err(ConvextError::InvalidInput(
                 "Could not encode image to target size.".to_string(),
             ));
         }
@@ -163,7 +163,7 @@ impl ImageProcessor {
         input: &Path,
         boxes: &[RedactionBox],
         suffix: &str,
-    ) -> CitrusResult<PathBuf> {
+    ) -> ConvextResult<PathBuf> {
         let img = image::open(input)?;
         let mut rgba: RgbaImage = img.to_rgba8();
         let (mut img_w, mut img_h) = rgba.dimensions();
@@ -245,7 +245,7 @@ impl ImageProcessor {
 }
 
 impl ImageProcessor {
-    pub fn add_solid_background(input: &Path, suffix: &str) -> CitrusResult<PathBuf> {
+    pub fn add_solid_background(input: &Path, suffix: &str) -> ConvextResult<PathBuf> {
         let img = image::open(input)?.to_rgba8();
         let (w, h) = img.dimensions();
         let pad = ((w.max(h) as f64) * 0.08) as u32;

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROJECT_DIR="/home/mustazafi/YAZILIM/citrus-daemon"
-BIN_PATH="$PROJECT_DIR/target/release/citrus-daemon"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BIN_PATH="$PROJECT_DIR/target/release/convext"
 RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}"
-SOCK_PATH="$RUNTIME_DIR/citrus-daemon-tray.sock"
+SOCK_PATH="$RUNTIME_DIR/convext-daemon.sock"
 DEMO_DIR="$PROJECT_DIR/demo_test_files"
 NAUTILUS_EXT_DIR="$HOME/.local/share/nautilus-python/extensions"
 
@@ -35,7 +35,7 @@ def make_png(path, width, height, rgb_fn):
 make_png(
     os.path.join(demo_dir, "1_gorsel_ornek.png"),
     640, 400,
-    lambda x, y, w, h: (255, int(90 * (x / w)), int(30 * (y / h)))
+    lambda x, y, w, h: (45, int(135 * (x / w)), int(225 * (y / h)))
 )
 
 # 2. Document (Markdown / DOCX)
@@ -52,7 +52,7 @@ with zipfile.ZipFile(epub_path, "w", zipfile.ZIP_DEFLATED) as zf:
 # 4. Spreadsheet (CSV)
 csv_path = os.path.join(demo_dir, "4_tablo_ornek.csv")
 with open(csv_path, "w", encoding="utf-8") as f:
-    f.write("Urun,Kategori,Durum\nConvext,Linux,Aktif\nContextMenu,UI,Hazir\n")
+    f.write("Urun,Kategori,Durum\nConvext,Linux,Aktif\nLibadwaita,UI,Hazir\n")
 
 # 5. Subtitles (SRT)
 srt_path = os.path.join(demo_dir, "5_altyazi_ornek.srt")
@@ -97,20 +97,24 @@ PYEOF
 
 install_convext_context_menu() {
     echo "[*] 'Convext Menü' sağ tık eklentisi kuruluyor..."
-    mkdir -p "$NAUTILUS_EXT_DIR"
+    mkdir -p "$NAUTILUS_EXT_DIR" "$HOME/.local/bin"
     rm -f "$NAUTILUS_EXT_DIR/citrus_selection_bridge.py"
     cp "$PROJECT_DIR/assets/convext_menu.py" "$NAUTILUS_EXT_DIR/convext_menu.py"
 }
 
 restart_daemon() {
-    echo "[*] Convext arka plan motoru (citrus-daemon) derleniyor ve başlatılıyor..."
+    echo "[*] Convext arka plan motoru (convext) derleniyor ve başlatılıyor..."
     (cd "$PROJECT_DIR" && cargo build --release)
 
+    pkill -x "convext" >/dev/null 2>&1 || true
     pkill -x "citrus-daemon" >/dev/null 2>&1 || true
     rm -f "$SOCK_PATH"
     sleep 0.3
 
-    setsid "$BIN_PATH" >/tmp/citrus-daemon.log 2>&1 < /dev/null &
+    cp "$BIN_PATH" "$HOME/.local/bin/convext"
+    chmod +x "$HOME/.local/bin/convext"
+
+    setsid "$BIN_PATH" >/tmp/convext.log 2>&1 < /dev/null &
     for _ in {1..30}; do
         if [ -S "$SOCK_PATH" ]; then
             break
@@ -118,7 +122,7 @@ restart_daemon() {
         sleep 0.2
     done
     sleep 0.2
-    echo "[*] Convext arka plan servisi aktif (Dairesel pencere devre dışı)!"
+    echo "[*] Convext arka plan servisi aktif (GNOME GTK4 + Libadwaita)!"
 }
 
 reload_nautilus() {
@@ -131,21 +135,10 @@ reload_nautilus() {
 }
 
 echo "========================================================"
-echo "   Convext Menü (Sağ Tık Context Menu Sistemi) Kurulumu "
+echo "   Convext (GNOME Libadwaita & Sağ Tık Sistemi)         "
 echo "========================================================"
 
 prepare_demo_files
 install_convext_context_menu
 restart_daemon
 reload_nautilus
-
-echo ""
-echo "========================================================"
-echo " KULLANIM REHBERİ:"
-echo "  • Dairesel (Circle) açılır pencere tamamen kaldırıldı."
-echo "  • Dosya yöneticisinde herhangi bir dosyaya (veya çoklu dosyaya)"
-echo "    SAĞ TIKLAYIP -> 'Convext Menü' seçeneğine gelmen yeterli!"
-echo "  • Sağ tıkladığın dosyanın türüne göre (Görsel, Video, Ses, PDF,"
-echo "    Belge, Tablo, Sunum, Altyazı, Arşiv) ilgili dönüştürme ve"
-echo "    araç alt menüleri otomatik olarak listelenir."
-echo "========================================================"

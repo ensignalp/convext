@@ -1,4 +1,4 @@
-use crate::error::{CitrusError, CitrusResult};
+use crate::error::{ConvextError, ConvextResult};
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
@@ -14,7 +14,7 @@ pub struct ArchiveProcessor;
 
 #[allow(dead_code)]
 impl ArchiveProcessor {
-    pub fn convert_archive(input: &Path, format: &str, suffix: &str) -> CitrusResult<PathBuf> {
+    pub fn convert_archive(input: &Path, format: &str, suffix: &str) -> ConvextResult<PathBuf> {
         let unpacked_dir = Self::extract_archive(input)?;
         let entries = vec![unpacked_dir.clone()];
         let fmt = format.to_ascii_lowercase();
@@ -28,7 +28,7 @@ impl ArchiveProcessor {
         res
     }
 
-    pub fn extract_archive(input: &Path) -> CitrusResult<PathBuf> {
+    pub fn extract_archive(input: &Path) -> ConvextResult<PathBuf> {
         let stem = input
             .file_stem()
             .and_then(|s| s.to_str())
@@ -46,11 +46,11 @@ impl ArchiveProcessor {
         if file_name_lower.ends_with(".zip") {
             let file = File::open(input)?;
             let mut archive =
-                ZipArchive::new(file).map_err(|e| CitrusError::Archive(e.to_string()))?;
+                ZipArchive::new(file).map_err(|e| ConvextError::Archive(e.to_string()))?;
             for i in 0..archive.len() {
                 let mut entry = archive
                     .by_index(i)
-                    .map_err(|e| CitrusError::Archive(e.to_string()))?;
+                    .map_err(|e| ConvextError::Archive(e.to_string()))?;
                 let Some(enclosed) = entry.enclosed_name().map(|p| p.to_path_buf()) else {
                     continue;
                 };
@@ -74,7 +74,7 @@ impl ArchiveProcessor {
             let mut tar_arc = tar::Archive::new(gz);
             tar_arc
                 .unpack(&out_dir)
-                .map_err(|e| CitrusError::Archive(e.to_string()))?;
+                .map_err(|e| ConvextError::Archive(e.to_string()))?;
             return Ok(out_dir);
         }
 
@@ -83,7 +83,7 @@ impl ArchiveProcessor {
             let mut tar_arc = tar::Archive::new(file);
             tar_arc
                 .unpack(&out_dir)
-                .map_err(|e| CitrusError::Archive(e.to_string()))?;
+                .map_err(|e| ConvextError::Archive(e.to_string()))?;
             return Ok(out_dir);
         }
 
@@ -94,13 +94,13 @@ impl ArchiveProcessor {
             .arg(&out_arg)
             .arg(input)
             .output()
-            .map_err(|e| CitrusError::ExternalBinary {
+            .map_err(|e| ConvextError::ExternalBinary {
                 binary: "7z".to_string(),
                 reason: e.to_string(),
             })?;
 
         if !output.status.success() {
-            return Err(CitrusError::Archive(
+            return Err(ConvextError::Archive(
                 String::from_utf8_lossy(&output.stderr).to_string(),
             ));
         }
@@ -108,9 +108,9 @@ impl ArchiveProcessor {
         Ok(out_dir)
     }
 
-    pub fn create_zip(inputs: &[PathBuf], suffix: &str) -> CitrusResult<PathBuf> {
+    pub fn create_zip(inputs: &[PathBuf], suffix: &str) -> ConvextResult<PathBuf> {
         let first = inputs.first().ok_or_else(|| {
-            CitrusError::InvalidInput("No files selected for ZIP creation.".to_string())
+            ConvextError::InvalidInput("No files selected for ZIP creation.".to_string())
         })?;
         let stem = first
             .file_stem()
@@ -132,7 +132,7 @@ impl ArchiveProcessor {
                     .and_then(|n| n.to_str())
                     .unwrap_or("item");
                 zip.start_file(name, options)
-                    .map_err(|e| CitrusError::Archive(e.to_string()))?;
+                    .map_err(|e| ConvextError::Archive(e.to_string()))?;
                 let mut f = File::open(path)?;
                 let mut buf = Vec::new();
                 f.read_to_end(&mut buf)?;
@@ -143,13 +143,13 @@ impl ArchiveProcessor {
         }
 
         zip.finish()
-            .map_err(|e| CitrusError::Archive(e.to_string()))?;
+            .map_err(|e| ConvextError::Archive(e.to_string()))?;
         Ok(out_path)
     }
 
-    pub fn create_tar(inputs: &[PathBuf], suffix: &str) -> CitrusResult<PathBuf> {
+    pub fn create_tar(inputs: &[PathBuf], suffix: &str) -> ConvextResult<PathBuf> {
         let first = inputs.first().ok_or_else(|| {
-            CitrusError::InvalidInput("No files selected for TAR creation.".to_string())
+            ConvextError::InvalidInput("No files selected for TAR creation.".to_string())
         })?;
         let stem = first
             .file_stem()
@@ -182,7 +182,7 @@ impl ArchiveProcessor {
         root: &Path,
         current: &Path,
         options: SimpleFileOptions,
-    ) -> CitrusResult<()> {
+    ) -> ConvextResult<()> {
         for entry in fs::read_dir(current)? {
             let entry = entry?;
             let path = entry.path();
@@ -195,7 +195,7 @@ impl ArchiveProcessor {
                 Self::add_dir_to_zip(zip, root, &path, options)?;
             } else if path.is_file() {
                 zip.start_file(&rel, options)
-                    .map_err(|e| CitrusError::Archive(e.to_string()))?;
+                    .map_err(|e| ConvextError::Archive(e.to_string()))?;
                 let mut f = File::open(&path)?;
                 let mut buf = Vec::new();
                 f.read_to_end(&mut buf)?;
@@ -205,9 +205,9 @@ impl ArchiveProcessor {
         Ok(())
     }
 
-    pub fn create_tar_gz(inputs: &[PathBuf], suffix: &str) -> CitrusResult<PathBuf> {
+    pub fn create_tar_gz(inputs: &[PathBuf], suffix: &str) -> ConvextResult<PathBuf> {
         let first = inputs.first().ok_or_else(|| {
-            CitrusError::InvalidInput("No files selected for TAR.GZ creation.".to_string())
+            ConvextError::InvalidInput("No files selected for TAR.GZ creation.".to_string())
         })?;
         let stem = first
             .file_stem()

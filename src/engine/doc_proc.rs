@@ -1,5 +1,5 @@
 use crate::engine::pdf_proc::PdfProcessor;
-use crate::error::{CitrusError, CitrusResult};
+use crate::error::{ConvextError, ConvextResult};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -14,7 +14,7 @@ impl DocProcessor {
         parent.join(format!("{}{}.{}", stem, suffix, ext))
     }
 
-    pub fn convert_document(input: &Path, target_ext: &str, suffix: &str) -> CitrusResult<PathBuf> {
+    pub fn convert_document(input: &Path, target_ext: &str, suffix: &str) -> ConvextResult<PathBuf> {
         let fmt = target_ext.to_ascii_lowercase();
         let out = Self::default_output(input, suffix, &fmt);
 
@@ -57,7 +57,7 @@ impl DocProcessor {
             }
         }
 
-        Err(CitrusError::Document(format!(
+        Err(ConvextError::Document(format!(
             "Could not convert {} to {}",
             input.display(),
             fmt
@@ -68,7 +68,7 @@ impl DocProcessor {
         input: &Path,
         target_ext: &str,
         suffix: &str,
-    ) -> CitrusResult<Vec<PathBuf>> {
+    ) -> ConvextResult<Vec<PathBuf>> {
         let fmt = target_ext.to_ascii_lowercase();
         if fmt == "jpg" || fmt == "png" {
             let pdf_path = Self::convert_via_libreoffice(input, "pdf")?;
@@ -83,7 +83,7 @@ impl DocProcessor {
         input: &Path,
         target_ext: &str,
         suffix: &str,
-    ) -> CitrusResult<PathBuf> {
+    ) -> ConvextResult<PathBuf> {
         let fmt = target_ext.to_ascii_lowercase();
         let in_ext = input
             .extension()
@@ -117,7 +117,7 @@ impl DocProcessor {
         input: &Path,
         target_ext: &str,
         suffix: &str,
-    ) -> CitrusResult<PathBuf> {
+    ) -> ConvextResult<PathBuf> {
         let fmt = target_ext.to_ascii_lowercase();
         let out = Self::default_output(input, suffix, &fmt);
         let raw = std::fs::read_to_string(input)?;
@@ -186,7 +186,7 @@ impl DocProcessor {
         Ok(out)
     }
 
-    pub fn convert_to_pdf_libreoffice(input: &Path) -> CitrusResult<PathBuf> {
+    pub fn convert_to_pdf_libreoffice(input: &Path) -> ConvextResult<PathBuf> {
         Self::convert_via_libreoffice(input, "pdf")
     }
 
@@ -194,24 +194,24 @@ impl DocProcessor {
         input: &Path,
         target_ext: &str,
         suffix: &str,
-    ) -> CitrusResult<PathBuf> {
+    ) -> ConvextResult<PathBuf> {
         Self::convert_document(input, target_ext, suffix)
     }
 
-    fn convert_via_libreoffice(input: &Path, target_ext: &str) -> CitrusResult<PathBuf> {
+    fn convert_via_libreoffice(input: &Path, target_ext: &str) -> ConvextResult<PathBuf> {
         let parent = input.parent().unwrap_or_else(|| Path::new("."));
         let output = Command::new("libreoffice")
             .args(["--headless", "--convert-to", target_ext, "--outdir"])
             .arg(parent)
             .arg(input)
             .output()
-            .map_err(|e| CitrusError::ExternalBinary {
+            .map_err(|e| ConvextError::ExternalBinary {
                 binary: "libreoffice".to_string(),
                 reason: e.to_string(),
             })?;
 
         if !output.status.success() {
-            return Err(CitrusError::Document(
+            return Err(ConvextError::Document(
                 String::from_utf8_lossy(&output.stderr).to_string(),
             ));
         }
@@ -226,7 +226,7 @@ impl DocProcessor {
         input: &Path,
         target_ext: &str,
         suffix: &str,
-    ) -> CitrusResult<Vec<PathBuf>> {
+    ) -> ConvextResult<Vec<PathBuf>> {
         let fmt = target_ext.to_ascii_lowercase();
         if fmt == "png" || fmt == "jpg" {
             let pdf = Self::convert_to_pdf_libreoffice(input)?;

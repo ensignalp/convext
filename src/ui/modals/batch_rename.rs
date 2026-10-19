@@ -1,6 +1,7 @@
-use crate::daemon::surface_bridge::SurfaceBridge;
-use crate::error::CitrusResult;
+use crate::error::ConvextResult;
 use gtk4::prelude::*;
+use libadwaita as adw;
+use libadwaita::prelude::*;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone)]
@@ -16,55 +17,62 @@ impl BatchRenameModal {
     where
         F: Fn(Vec<PathBuf>, BatchRenameSpec) + 'static,
     {
-        let window = gtk4::Window::builder()
+        let window = adw::Window::builder()
             .application(app)
-            .title("Tangerine Batch Renamer")
+            .title("Convext — Toplu Yeniden Adlandır")
+            .default_width(440)
+            .default_height(310)
             .build();
-        SurfaceBridge::configure_floating_panel(&window, "Batch Rename", 400, 240);
-        window.add_css_class("citrus-modal-window");
 
-        let root = gtk4::Box::new(gtk4::Orientation::Vertical, 10);
-        root.set_margin_top(16);
-        root.set_margin_bottom(16);
-        root.set_margin_start(16);
-        root.set_margin_end(16);
+        let toolbar_view = adw::ToolbarView::new();
+        let header_bar = adw::HeaderBar::new();
+        let win_title = adw::WindowTitle::new(
+            "Toplu Yeniden Adlandır",
+            "Şablon: {name}, {index}, {date}",
+        );
+        header_bar.set_title_widget(Some(&win_title));
+        toolbar_view.add_top_bar(&header_bar);
 
-        let title = gtk4::Label::new(Some("Pattern Batch Renamer"));
-        title.add_css_class("citrus-header");
-        title.set_halign(gtk4::Align::Start);
-        root.append(&title);
+        let page = adw::PreferencesPage::new();
+        let group = adw::PreferencesGroup::builder()
+            .title("Adlandırma Şablonu")
+            .description("Kullanılabilir değişkenler: {name}, {index}, {date}")
+            .build();
 
-        let hint = gtk4::Label::new(Some("Tokens: {name}, {index}, {date}"));
-        hint.add_css_class("citrus-Subheader");
-        hint.set_halign(gtk4::Align::Start);
-        root.append(&hint);
+        let pattern_entry = adw::EntryRow::builder()
+            .title("Şablon (Pattern)")
+            .text("{name}_{index}_{date}")
+            .build();
 
-        let pattern_entry = gtk4::Entry::new();
-        pattern_entry.add_css_class("citrus-input");
-        pattern_entry.set_text("{name}_{index}_{date}");
-        root.append(&pattern_entry);
-
-        let preview_lbl = gtk4::Label::new(Some("Preview: file_01_2026-10-19.ext"));
-        preview_lbl.add_css_class("citrus-Subheader");
-        preview_lbl.set_halign(gtk4::Align::Start);
-        root.append(&preview_lbl);
+        let preview_row = adw::ActionRow::builder()
+            .title("Önizleme (Preview)")
+            .subtitle("file_01_2026-10-19.ext")
+            .build();
 
         let first_sample = files.first().cloned();
-        let prev_clone = preview_lbl.clone();
+        let prev_clone = preview_row.clone();
         pattern_entry.connect_changed(move |e| {
             let pat = e.text().to_string();
             if let Some(ref sample) = first_sample {
                 let rendered = Self::format_filename(sample, &pat, 1);
-                prev_clone.set_text(&format!("Preview: {}", rendered));
+                prev_clone.set_subtitle(&rendered);
             }
         });
 
-        let btn_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
-        let cancel_btn = gtk4::Button::with_label("Cancel");
-        cancel_btn.add_css_class("citrus-btn-secondary");
-        let apply_btn = gtk4::Button::with_label("Rename All");
-        apply_btn.add_css_class("citrus-btn-primary");
-        apply_btn.set_hexpand(true);
+        group.add(&pattern_entry);
+        group.add(&preview_row);
+        page.add(&group);
+
+        let action_group = adw::PreferencesGroup::new();
+        let btn_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 10);
+        btn_row.set_halign(gtk4::Align::End);
+
+        let cancel_btn = gtk4::Button::with_label("İptal");
+        cancel_btn.add_css_class("pill");
+
+        let apply_btn = gtk4::Button::with_label("Tümünü Yeniden Adlandır");
+        apply_btn.add_css_class("suggested-action");
+        apply_btn.add_css_class("pill");
 
         let win_c = window.clone();
         cancel_btn.connect_clicked(move |_| {
@@ -86,9 +94,11 @@ impl BatchRenameModal {
 
         btn_row.append(&cancel_btn);
         btn_row.append(&apply_btn);
-        root.append(&btn_row);
+        action_group.add(&btn_row);
+        page.add(&action_group);
 
-        window.set_child(Some(&root));
+        toolbar_view.set_content(Some(&page));
+        window.set_content(Some(&toolbar_view));
         window.present();
     }
 
@@ -116,7 +126,7 @@ impl BatchRenameModal {
     pub fn execute_batch_rename(
         files: &[PathBuf],
         spec: &BatchRenameSpec,
-    ) -> CitrusResult<Vec<PathBuf>> {
+    ) -> ConvextResult<Vec<PathBuf>> {
         let mut out = Vec::new();
         for (i, path) in files.iter().enumerate() {
             let new_name = Self::format_filename(path, &spec.pattern, spec.start_index + i);

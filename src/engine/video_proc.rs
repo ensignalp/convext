@@ -1,4 +1,4 @@
-use crate::error::{CitrusError, CitrusResult};
+use crate::error::{ConvextError, ConvextResult};
 use crate::ui::modals::media_trimmer::TrimParameters;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -17,7 +17,7 @@ impl VideoProcessor {
         parent.join(format!("{}{}.{}", stem, suffix, ext))
     }
 
-    pub fn convert_format(input: &Path, format: &str, suffix: &str) -> CitrusResult<PathBuf> {
+    pub fn convert_format(input: &Path, format: &str, suffix: &str) -> ConvextResult<PathBuf> {
         let fmt = format.to_ascii_lowercase();
         if fmt == "mp3" {
             return Self::extract_audio_mp3(input, suffix);
@@ -54,7 +54,7 @@ impl VideoProcessor {
         Ok(out)
     }
 
-    pub fn probe_duration_secs(input: &Path) -> CitrusResult<f64> {
+    pub fn probe_duration_secs(input: &Path) -> ConvextResult<f64> {
         let output = Command::new("ffprobe")
             .args([
                 "-v",
@@ -66,7 +66,7 @@ impl VideoProcessor {
             ])
             .arg(input)
             .output()
-            .map_err(|e| CitrusError::ExternalBinary {
+            .map_err(|e| ConvextError::ExternalBinary {
                 binary: "ffprobe".to_string(),
                 reason: e.to_string(),
             })?;
@@ -79,11 +79,11 @@ impl VideoProcessor {
         Ok(parsed.max(0.5))
     }
 
-    pub fn convert_to_mp4(input: &Path, suffix: &str) -> CitrusResult<PathBuf> {
+    pub fn convert_to_mp4(input: &Path, suffix: &str) -> ConvextResult<PathBuf> {
         Self::convert_format(input, "mp4", suffix)
     }
 
-    pub fn extract_audio_mp3(input: &Path, suffix: &str) -> CitrusResult<PathBuf> {
+    pub fn extract_audio_mp3(input: &Path, suffix: &str) -> ConvextResult<PathBuf> {
         let out = Self::default_output(input, suffix, "mp3");
         Self::run_ffmpeg(&[
             "-y",
@@ -99,7 +99,7 @@ impl VideoProcessor {
         Ok(out)
     }
 
-    pub fn capture_snapshot_png(input: &Path, suffix: &str) -> CitrusResult<PathBuf> {
+    pub fn capture_snapshot_png(input: &Path, suffix: &str) -> ConvextResult<PathBuf> {
         let duration = Self::probe_duration_secs(input).unwrap_or(4.0);
         let timestamp = (duration * 0.25).clamp(0.0, duration);
         let ts_str = format!("{:.2}", timestamp);
@@ -117,7 +117,7 @@ impl VideoProcessor {
         Ok(out)
     }
 
-    pub fn quick_compress(input: &Path, suffix: &str) -> CitrusResult<PathBuf> {
+    pub fn quick_compress(input: &Path, suffix: &str) -> ConvextResult<PathBuf> {
         let out = Self::default_output(input, suffix, "mp4");
         Self::run_ffmpeg(&[
             "-y",
@@ -142,7 +142,7 @@ impl VideoProcessor {
         input: &Path,
         target_bytes: u64,
         suffix: &str,
-    ) -> CitrusResult<PathBuf> {
+    ) -> ConvextResult<PathBuf> {
         let duration = Self::probe_duration_secs(input)?;
         let total_bits = (target_bytes as f64) * 8.0 * 0.92;
         let total_kbps = (total_bits / duration / 1000.0).max(160.0);
@@ -180,7 +180,7 @@ impl VideoProcessor {
         input: &Path,
         params: &TrimParameters,
         suffix: &str,
-    ) -> CitrusResult<PathBuf> {
+    ) -> ConvextResult<PathBuf> {
         let ext = input
             .extension()
             .and_then(|e| e.to_str())
@@ -213,7 +213,7 @@ impl VideoProcessor {
         Ok(out)
     }
 
-    pub fn split_in_half(input: &Path) -> CitrusResult<Vec<PathBuf>> {
+    pub fn split_in_half(input: &Path) -> ConvextResult<Vec<PathBuf>> {
         let duration = Self::probe_duration_secs(input)?;
         let mid = duration / 2.0;
         let mid_s = format!("{:.2}", mid);
@@ -250,13 +250,13 @@ impl VideoProcessor {
         Ok(vec![part1, part2])
     }
 
-    pub fn join_videos(inputs: &[PathBuf], suffix: &str) -> CitrusResult<PathBuf> {
+    pub fn join_videos(inputs: &[PathBuf], suffix: &str) -> ConvextResult<PathBuf> {
         let first = inputs.first().ok_or_else(|| {
-            CitrusError::InvalidInput("No videos provided for join.".to_string())
+            ConvextError::InvalidInput("No videos provided for join.".to_string())
         })?;
         let out = Self::default_output(first, suffix, "mp4");
         let list_path = std::env::temp_dir().join(format!(
-            "citrus_concat_{}.txt",
+            "convext_concat_{}.txt",
             chrono::Utc::now().timestamp_millis()
         ));
 
@@ -284,16 +284,16 @@ impl VideoProcessor {
         Ok(out)
     }
 
-    fn run_ffmpeg(args: &[&str]) -> CitrusResult<()> {
+    fn run_ffmpeg(args: &[&str]) -> ConvextResult<()> {
         let output = Command::new("ffmpeg").args(args).output().map_err(|e| {
-            CitrusError::ExternalBinary {
+            ConvextError::ExternalBinary {
                 binary: "ffmpeg".to_string(),
                 reason: e.to_string(),
             }
         })?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            return Err(CitrusError::ExternalBinary {
+            return Err(ConvextError::ExternalBinary {
                 binary: "ffmpeg".to_string(),
                 reason: stderr,
             });
@@ -301,7 +301,7 @@ impl VideoProcessor {
         Ok(())
     }
 
-    pub fn mute_audio(input: &Path, suffix: &str) -> CitrusResult<PathBuf> {
+    pub fn mute_audio(input: &Path, suffix: &str) -> ConvextResult<PathBuf> {
         let ext = input.extension().and_then(|e| e.to_str()).unwrap_or("mp4");
         let out = Self::default_output(input, suffix, ext);
         Self::run_ffmpeg(&[
@@ -316,7 +316,7 @@ impl VideoProcessor {
         Ok(out)
     }
 
-    pub fn crop_center_video(input: &Path, suffix: &str) -> CitrusResult<PathBuf> {
+    pub fn crop_center_video(input: &Path, suffix: &str) -> ConvextResult<PathBuf> {
         let ext = input.extension().and_then(|e| e.to_str()).unwrap_or("mp4");
         let out = Self::default_output(input, suffix, ext);
         Self::run_ffmpeg(&[
@@ -332,7 +332,7 @@ impl VideoProcessor {
         Ok(out)
     }
 
-    pub fn redact_video_center(input: &Path, suffix: &str) -> CitrusResult<PathBuf> {
+    pub fn redact_video_center(input: &Path, suffix: &str) -> ConvextResult<PathBuf> {
         let ext = input.extension().and_then(|e| e.to_str()).unwrap_or("mp4");
         let out = Self::default_output(input, suffix, ext);
         Self::run_ffmpeg(&[
