@@ -49,6 +49,24 @@ def patch_all_nautilus_menus() -> bool:
     return False
 
 
+def list_kdeconnect_devices() -> list[tuple[str, str]]:
+    devices = []
+    try:
+        out = subprocess.check_output(
+            ["kdeconnect-cli", "-a", "--id-name-only"],
+            stderr=subprocess.DEVNULL,
+            timeout=0.8,
+        ).decode("utf-8", errors="ignore")
+        for line in out.splitlines():
+            s = line.strip()
+            if " " in s:
+                dev_id, dev_name = s.split(" ", 1)
+                devices.append((dev_id.strip(), dev_name.strip()))
+    except Exception:
+        pass
+    return devices
+
+
 def resolve_daemon_binary() -> str:
     candidates = [
         os.path.expanduser("~/.local/bin/convext"),
@@ -395,11 +413,35 @@ class ConvextMenuExtension(GObject.GObject, Nautilus.MenuProvider):
             arc_sub.append_item(self._make_item("GZIP Arşivi Oluştur (.tar.gz)", "ARC_CREATE_GZIP", paths))
             root_menu.append_item(arc_parent)
 
+        # SHARE & SEND SUBMENU (KDE Connect + LocalSend)
+        share_parent, share_sub = self._make_submenu("Cihaza Gönder (KDE Connect & LocalSend)")
+        share_sub.append_item(
+            self._make_item(
+                "Hızlı Gönder (KDE Connect / LocalSend Otomatik)",
+                "ACT_AIRDROP",
+                paths,
+            )
+        )
+        for dev_id, dev_name in list_kdeconnect_devices():
+            share_sub.append_item(
+                self._make_item(
+                    f"KDE Connect: {dev_name} Cihazına Gönder",
+                    f"ACT_KDECONNECT_DEV:{dev_id}",
+                    paths,
+                )
+            )
+        share_sub.append_item(
+            self._make_item("KDE Connect Cihaz Seçici ile Gönder...", "ACT_KDECONNECT", paths)
+        )
+        share_sub.append_item(
+            self._make_item("LocalSend ile Gönder", "ACT_LOCALSEND", paths)
+        )
+        root_menu.append_item(share_parent)
+
         # FILE ACTIONS SUBMENU
         act_parent, act_sub = self._make_submenu("Dosya İşlemleri (File Actions)")
         act_sub.append_item(self._make_item("Toplu Yeniden Adlandır (Batch Rename)...", "ACT_BATCH_RENAME", paths))
         act_sub.append_item(self._make_item("Float Rafına Ekle (Floating Shelf)", "ACT_FLOAT", paths))
-        act_sub.append_item(self._make_item("LocalSend / AirDrop ile Gönder", "ACT_AIRDROP", paths))
         act_sub.append_item(self._make_item("Dosyayı Çoğalt (Duplicate)", "ACT_COPY_FILES", paths))
         act_sub.append_item(self._make_item("Convext_Organized Klasörüne Taşı", "ACT_MOVE_ORGANIZED", paths))
         act_sub.append_item(self._make_item("Tam Dosya Yolunu Kopyala (Copy Path)", "ACT_COPY_PATH", paths))

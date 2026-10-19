@@ -369,7 +369,9 @@ impl ConvextStudioWindow {
         let act_list: Vec<(&str, &str)> = vec![
             ("ACT_BATCH_RENAME", "Toplu Yeniden Adlandır (Batch Rename)..."),
             ("ACT_FLOAT", "Float Rafına Sabitle (Floating Shelf)"),
-            ("ACT_AIRDROP", "LocalSend / AirDrop ile Cihaza Gönder"),
+            ("ACT_AIRDROP", "Hızlı Gönder (KDE Connect / LocalSend Otomatik)"),
+            ("ACT_KDECONNECT", "KDE Connect ile Cihaza Gönder"),
+            ("ACT_LOCALSEND", "LocalSend ile Cihaza Gönder"),
             ("ACT_COPY_FILES", "Dosyayı Aynı Klasörde Çoğalt (Duplicate)"),
             ("ACT_MOVE_ORGANIZED", "Convext_Organized Klasörüne Taşı"),
             ("ACT_COPY_PATH", "Tam Dosya Yolunu Panoya Kopyala (Copy Path)"),

@@ -208,6 +208,16 @@ fn dispatch_convext_command(
         );
         return;
     }
+    if let Some(dev_id) = action_code.strip_prefix("ACT_KDECONNECT_DEV:") {
+        let dev = dev_id.to_string();
+        tokio::spawn(async move {
+            match DesktopActions::send_via_kdeconnect(&files, Some(&dev)) {
+                Ok(msg) => DesktopActions::send_desktop_notification("Convext — KDE Connect", &msg),
+                Err(e) => DesktopActions::send_desktop_notification("KDE Connect Hatası", &e.to_string()),
+            }
+        });
+        return;
+    }
     if let Some(fmt) = action_code.strip_prefix("ARC_CONVERT:") {
         dispatch_batch_action(
             app,
@@ -685,6 +695,22 @@ fn dispatch_convext_command(
             config,
             prog_tx,
         ),
+        "ACT_KDECONNECT" => {
+            tokio::spawn(async move {
+                match DesktopActions::send_via_kdeconnect(&files, None) {
+                    Ok(msg) => DesktopActions::send_desktop_notification("Convext — KDE Connect", &msg),
+                    Err(e) => DesktopActions::send_desktop_notification("KDE Connect Hatası", &e.to_string()),
+                }
+            });
+        }
+        "ACT_LOCALSEND" => {
+            tokio::spawn(async move {
+                match DesktopActions::send_via_localsend(&files) {
+                    Ok(msg) => DesktopActions::send_desktop_notification("Convext — LocalSend", &msg),
+                    Err(e) => DesktopActions::send_desktop_notification("LocalSend Hatası", &e.to_string()),
+                }
+            });
+        }
         "ACT_COPY_FILES" => dispatch_batch_action(
             app,
             shelf,
@@ -760,9 +786,12 @@ fn dispatch_batch_action(
             }
         }
         SliceAction::ActionAirDrop => {
-            if let Err(e) = DesktopActions::send_via_localsend(&active_files) {
-                DesktopActions::send_desktop_notification("AirDrop / LocalSend", &e.to_string());
-            }
+            tokio::spawn(async move {
+                match DesktopActions::send_via_kdeconnect_or_localsend(&active_files) {
+                    Ok(msg) => DesktopActions::send_desktop_notification("Convext — Cihaz Paylaşımı", &msg),
+                    Err(e) => DesktopActions::send_desktop_notification("Paylaşım Hatası", &e.to_string()),
+                }
+            });
         }
         SliceAction::ImageEditTool
         | SliceAction::ImageAnnotateTool
